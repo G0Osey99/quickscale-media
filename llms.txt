@@ -1,0 +1,19 @@
+# QuickScale Media
+
+> A Lititz, Pennsylvania marketing agency built only for home service businesses
+> (painters, roofers, gutter, floor-coating, landscaping, HVAC, and similar trades).
+> We run Facebook & Instagram (Meta) ad campaigns AND film the content ourselves —
+> on-site footage of real jobs — to generate qualified leads and booked jobs.
+> Differentiator: in-house content creation. Service area: Lititz, Lancaster County,
+> and Pennsylvania. Primary action: book a free strategy call.
+
+## Pages
+- [Home](https://quickscalem.com/): What we do, proof, and the booking form.
+- [Services](https://quickscalem.com/services/): Meta Ads Management, In-House Content Creation, Lead Funnel & Automation, plus FAQs.
+- [Process](https://quickscalem.com/process/): Strategy Call → Content Day → Campaign Launch → Follow-Up & Optimization.
+- [About](https://quickscalem.com/about/): Who we are, what we believe, and the founders (Daniel Demidovich, Ty Eckert).
+- [Contact](https://quickscalem.com/contact/): Book a free, no-obligation strategy call.
+
+## Canonical
+- Domain: https://quickscalem.com
+- Sitemap: https://quickscalem.com/sitemap.xml
