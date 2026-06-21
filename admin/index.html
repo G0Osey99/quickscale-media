@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuickScale Admin</title>
+<!-- Admin must never be indexed. (Also Disallowed in robots.txt; production sets X-Robots-Tag too.) -->
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+  <div class="proto-banner" role="note">
+    <strong>FRONT-END PROTOTYPE</strong> — demo data only, <strong>not connected to a backend and not secured</strong>. Activate the real Supabase backend per <code>PROVISION.md</code>.
+  </div>
+  <div id="app" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- config.js carries the (public) Supabase URL/anon key once live; the prototype ignores it and uses mock data. -->
+  <script src="../assets/js/config.js" defer></script>
+  <script src="assets/mock-data.js" defer></script>
+  <script src="assets/admin.js" defer></script>
+</body>
+</html>

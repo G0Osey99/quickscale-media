@@ -16,24 +16,45 @@ this build is the actual site it represents: real multi-page structure, no runti
 Prototype/
 ├── index.html              # Home (hero, proof, differentiator, value cards,
 │                           #       stats, testimonials, team teaser, lead form #book)
-├── services/index.html     # 3 service pillars + FAQ (FAQPage schema)
-├── process/index.html      # 4-step interactive switcher (HowTo schema)
-├── about/index.html        # Story, beliefs, team, proof
-├── contact/index.html      # Booking form + NAP (LocalBusiness schema)
-├── 404.html                # Branded, self-contained not-found page
+├── services/ process/ about/ contact/   # the four sub-pages (folder + index.html)
+├── privacy/ terms/         # legal pages (the SMS-consent form needs these)
+├── 404.html                # Branded not-found page
 ├── assets/
-│   ├── css/styles.css       # Design tokens + all components (one stylesheet)
-│   ├── js/main.js           # Nav, carousel, stat count-up, FAQ, steps, form (vanilla, progressive)
-│   └── img/                 # favicon.svg, favicon-32.png, apple-touch-icon.png, icon-512.png, og-image.png
-├── robots.txt
-├── sitemap.xml
-├── llms.txt                # AI-crawler pointer file (entity + key pages)
-└── .nojekyll               # Serve files as-is (no Jekyll build)
+│   ├── css/styles.css      # Design tokens + all components (one stylesheet)
+│   ├── js/config.js        # PUBLIC runtime config (demo flag, endpoint, public keys)
+│   ├── js/main.js          # Nav, carousel, count-up, FAQ, steps, lead form (live or demo)
+│   └── img/                # favicon.svg, favicon-32.png, apple-touch-icon.png, icon-512.png, og-image.png
+├── admin/                  # Admin panel — FRONT-END PROTOTYPE (login+2FA, inbox,
+│   │                       #   media manager, content editor, users, settings)
+│   ├── index.html
+│   └── assets/             # admin.css, admin.js, mock-data.js
+├── media/slots.json        # Registry of every replaceable media slot (uploader writes this)
+├── supabase/               # BACKEND ACTIVATION KIT (run when going live)
+│   ├── schema.sql          #   tables + Row-Level Security + roles
+│   └── functions/submit-lead/index.ts   # hardened lead-capture Edge Function
+├── robots.txt  sitemap.xml  llms.txt  .nojekyll
+├── PROVISION.md            # step-by-step: flip the demo to a live Supabase backend
+└── README.md
 ```
 
 Pages use **folder + `index.html`** so URLs are clean slugs (`/services/`, `/process/`, …),
-and all links/assets are **relative**, so it works deployed at a domain root *or* a project
-subpath (`user.github.io/repo/`).
+and links/assets are **relative**, so it works at a domain root *or* a project subpath
+(`user.github.io/repo/`). Canonical/OG/sitemap currently point at the **github.io demo URL**
+(`g0osey99.github.io/quickscale-media`); swap to `quickscalem.com` when the domain is live.
+
+## Admin panel & backend
+
+`admin/` is a polished, on-brand **front-end prototype** of the systems panel — login → TOTP
+2FA → backup-code, a lead **inbox** (statuses, notes, search, mark-spam), a **media manager**
+(every slot mapped, drag-drop, alt text), a **content editor**, **users/invites**, and
+**settings**. It runs on demo data and a theatrical login (gates the UI only); it is `noindex`
+and `Disallow`ed in robots.txt.
+
+To make it real (login/2FA, an inbox that receives submissions, secure uploads, email invites),
+follow **`PROVISION.md`** — it wires the public forms + admin to **Supabase** (Auth + TOTP MFA,
+Postgres + RLS, Storage, invites) using the `supabase/` kit. The public forms are already
+backend-ready: set `live:true` + the endpoint in `assets/js/config.js` and they POST to the
+Edge Function (which validates, rate-limits, and persists before notifying).
 
 ## Preview locally
 
@@ -50,8 +71,9 @@ python -m http.server 8080      # then open http://localhost:8080
 2. **Settings → Pages →** deploy from branch. Set the source to the folder that contains
    `index.html` (move these files to the repo root, or point Pages at `/Prototype`, or use
    an Actions workflow).
-3. For a custom domain (`quickscalem.com`), add a `CNAME` file containing the domain and
-   configure DNS. Canonical/OG/JSON-LD URLs already point at `https://quickscalem.com`.
+3. For a custom domain (`quickscalem.com`), add a `CNAME` file containing the domain,
+   configure DNS, then find/replace the github.io demo URL → `https://quickscalem.com`
+   across the HTML + `sitemap.xml`/`robots.txt`/`llms.txt` and fix the `404.html` base path.
 
 ## Replace before launch (placeholders)
 

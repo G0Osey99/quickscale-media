@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Facebook &amp; Instagram Ads for Home Services | QuickScale Media</title>
 <meta name="description" content="We run Facebook &amp; Instagram ads and film your job-site content in-house — turning scrollers into booked estimates for home service businesses in Pennsylvania.">
-<link rel="canonical" href="https://quickscalem.com/">
+<link rel="canonical" href="https://g0osey99.github.io/quickscale-media/">
 <meta name="theme-color" content="#FFC400">
 
 <!-- Open Graph / Twitter -->
@@ -13,14 +13,14 @@
 <meta property="og:site_name" content="QuickScale Media">
 <meta property="og:title" content="Facebook &amp; Instagram Ads for Home Services | QuickScale Media">
 <meta property="og:description" content="We run your Meta ads and film the content ourselves — real job-site footage that turns scrollers into booked estimates.">
-<meta property="og:url" content="https://quickscalem.com/">
-<meta property="og:image" content="https://quickscalem.com/assets/img/og-image.png">
+<meta property="og:url" content="https://g0osey99.github.io/quickscale-media/">
+<meta property="og:image" content="https://g0osey99.github.io/quickscale-media/assets/img/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Facebook &amp; Instagram Ads for Home Services | QuickScale Media">
 <meta name="twitter:description" content="We run your Meta ads and film the content ourselves — real job-site footage that turns scrollers into booked estimates.">
-<meta name="twitter:image" content="https://quickscalem.com/assets/img/og-image.png">
+<meta name="twitter:image" content="https://g0osey99.github.io/quickscale-media/assets/img/og-image.png">
 
 <!-- Icons -->
 <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
@@ -40,10 +40,10 @@
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://quickscalem.com/#organization",
+      "@id": "https://g0osey99.github.io/quickscale-media/#organization",
       "name": "QuickScale Media",
-      "url": "https://quickscalem.com/",
-      "logo": "https://quickscalem.com/assets/img/icon-512.png",
+      "url": "https://g0osey99.github.io/quickscale-media/",
+      "logo": "https://g0osey99.github.io/quickscale-media/assets/img/icon-512.png",
       "description": "Marketing agency for home service businesses — Facebook & Instagram ads plus in-house content creation.",
       "founder": [
         { "@type": "Person", "name": "Daniel Demidovich" },
@@ -53,17 +53,17 @@
     },
     {
       "@type": "WebSite",
-      "@id": "https://quickscalem.com/#website",
-      "url": "https://quickscalem.com/",
+      "@id": "https://g0osey99.github.io/quickscale-media/#website",
+      "url": "https://g0osey99.github.io/quickscale-media/",
       "name": "QuickScale Media",
-      "publisher": { "@id": "https://quickscalem.com/#organization" }
+      "publisher": { "@id": "https://g0osey99.github.io/quickscale-media/#organization" }
     },
     {
       "@type": "ProfessionalService",
-      "@id": "https://quickscalem.com/#business",
+      "@id": "https://g0osey99.github.io/quickscale-media/#business",
       "name": "QuickScale Media",
-      "image": "https://quickscalem.com/assets/img/og-image.png",
-      "url": "https://quickscalem.com/",
+      "image": "https://g0osey99.github.io/quickscale-media/assets/img/og-image.png",
+      "url": "https://g0osey99.github.io/quickscale-media/",
       "telephone": "+1-717-555-0142",
       "email": "hello@quickscalem.com",
       "priceRange": "$$",
@@ -78,7 +78,7 @@
         { "@type": "AdministrativeArea", "name": "Lancaster County" },
         { "@type": "State", "name": "Pennsylvania" }
       ],
-      "parentOrganization": { "@id": "https://quickscalem.com/#organization" }
+      "parentOrganization": { "@id": "https://g0osey99.github.io/quickscale-media/#organization" }
     }
   ]
 }
@@ -316,6 +316,7 @@
       <div class="col">
         <form class="form" data-leadform="home" novalidate>
           <div class="form__title">Tell us about your business</div>
+          <noscript><p class="formnote" style="color:#d6492f;margin-bottom:12px">This form needs JavaScript. Please call <a href="tel:+17175550142">(717) 555-0142</a> or email <a href="mailto:hello@quickscalem.com">hello@quickscalem.com</a> to book your call.</p></noscript>
           <div class="form__fields">
             <div class="field">
               <label for="h-fullName">Full name</label>
@@ -339,12 +340,15 @@
                 <div class="error" data-error="email" role="alert"></div>
               </div>
             </div>
-            <button type="button" class="consent" aria-pressed="false">
+            <label class="consent">
+              <input type="checkbox" name="smsConsent" value="yes" class="consent__cb">
               <span class="checkbox" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1b1813" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span>
-              <span class="consent__text">I agree to receive SMS updates about my inquiry. Msg &amp; data rates may apply. (Optional)</span>
-            </button>
+              <span class="consent__text">I agree to receive SMS updates about my inquiry from QuickScale Media. Msg &amp; data rates may apply; reply STOP to opt out. (Optional)</span>
+            </label>
+            <div class="hp" aria-hidden="true"><label>Company website<input type="text" name="company_website" tabindex="-1" autocomplete="off"></label></div>
+            <div class="error" data-form-error role="alert"></div>
             <button type="submit" class="btn btn--primary btn--block">Book My Free Strategy Call</button>
-            <div class="formnote">No obligation · we reply within 1 business day</div>
+            <div class="formnote">No obligation · we reply within 1 business day. By submitting you agree to our <a class="formlink" href="privacy/">Privacy Policy</a>.</div>
           </div>
         </form>
         <div class="success" data-success="home" hidden>
@@ -393,6 +397,10 @@
   </div>
   <div class="site-footer__bottom">
     <span>© <span data-year>2026</span> QuickScale Media. All rights reserved.</span>
+    <nav class="footer-legal" aria-label="Legal">
+      <a href="privacy/">Privacy Policy</a>
+      <a href="terms/">Terms</a>
+    </nav>
     <b>Scale Quick! ⚡</b>
   </div>
 </footer>
@@ -402,6 +410,7 @@
   <a class="btn btn--primary" href="#book">Book My Free Strategy Call</a>
 </div>
 
+<script src="assets/js/config.js" defer></script>
 <script src="assets/js/main.js" defer></script>
 </body>
 </html>

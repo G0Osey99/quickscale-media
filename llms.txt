@@ -8,12 +8,14 @@
 > and Pennsylvania. Primary action: book a free strategy call.
 
 ## Pages
-- [Home](https://quickscalem.com/): What we do, proof, and the booking form.
-- [Services](https://quickscalem.com/services/): Meta Ads Management, In-House Content Creation, Lead Funnel & Automation, plus FAQs.
-- [Process](https://quickscalem.com/process/): Strategy Call → Content Day → Campaign Launch → Follow-Up & Optimization.
-- [About](https://quickscalem.com/about/): Who we are, what we believe, and the founders (Daniel Demidovich, Ty Eckert).
-- [Contact](https://quickscalem.com/contact/): Book a free, no-obligation strategy call.
+- [Home](https://g0osey99.github.io/quickscale-media/): What we do, proof, and the booking form.
+- [Services](https://g0osey99.github.io/quickscale-media/services/): Meta Ads Management, In-House Content Creation, Lead Funnel & Automation, plus FAQs.
+- [Process](https://g0osey99.github.io/quickscale-media/process/): Strategy Call → Content Day → Campaign Launch → Follow-Up & Optimization.
+- [About](https://g0osey99.github.io/quickscale-media/about/): Who we are, what we believe, and the founders (Daniel Demidovich, Ty Eckert).
+- [Contact](https://g0osey99.github.io/quickscale-media/contact/): Book a free, no-obligation strategy call.
+- [Privacy Policy](https://g0osey99.github.io/quickscale-media/privacy/): How we handle the information you submit.
+- [Terms of Service](https://g0osey99.github.io/quickscale-media/terms/): Terms for using the site.
 
 ## Canonical
-- Domain: https://quickscalem.com
-- Sitemap: https://quickscalem.com/sitemap.xml
+- Domain: https://g0osey99.github.io/quickscale-media
+- Sitemap: https://g0osey99.github.io/quickscale-media/sitemap.xml

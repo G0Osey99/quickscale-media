@@ -10,6 +10,50 @@
   var HEADER_OFFSET = 84;
   var $ = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var CFG = window.QS_CONFIG || {};
+
+  /* ---- Lead-source attribution (first-touch, persisted across pages) ---- */
+  var ATTRIBUTION = (function () {
+    try {
+      var KEY = 'qs_attribution';
+      var saved = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+      if (saved) return saved;
+      var q = new URLSearchParams(location.search), g = function (k) { return q.get(k) || ''; };
+      var attr = {
+        utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
+        utm_term: g('utm_term'), utm_content: g('utm_content'),
+        fbclid: g('fbclid'), gclid: g('gclid'), msclkid: g('msclkid'),
+        referrer: document.referrer || '', landingPage: location.pathname + location.search
+      };
+      sessionStorage.setItem(KEY, JSON.stringify(attr));
+      return attr;
+    } catch (e) { return {}; }
+  })();
+
+  /* ---- Analytics: load ONLY if public IDs are configured (off in demo) ---- */
+  (function initAnalytics() {
+    if (CFG.metaPixelId) {
+      !function (f, b, e, v, n, t, s) {
+        if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0'; n.queue = [];
+        t = b.createElement(e); t.async = !0; t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+      }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+      window.fbq('init', CFG.metaPixelId); window.fbq('track', 'PageView');
+    }
+    if (CFG.ga4MeasurementId) {
+      var s = document.createElement('script'); s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(CFG.ga4MeasurementId);
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = function () { window.dataLayer.push(arguments); };
+      window.gtag('js', new Date()); window.gtag('config', CFG.ga4MeasurementId);
+    }
+  })();
+
+  function fireLeadAnalytics(eventId) {
+    try { if (window.fbq) window.fbq('track', 'Lead', {}, { eventID: eventId }); } catch (e) {}
+    try { if (window.gtag) window.gtag('event', 'generate_lead'); } catch (e) {}
+  }
 
   /* ---- Mobile nav drawer ---- */
   var toggle = $('.navtoggle');
@@ -125,28 +169,47 @@
     });
   }
 
-  /* ---- Lead form: validation + success state ---- */
+  /* ---- Lead form: validation, anti-spam, submit (live or demo) ---- */
   $$('form[data-leadform]').forEach(function (form) {
     var key = form.getAttribute('data-leadform');
     var success = $('[data-success="' + key + '"]');
-    var consent = $('.consent', form);
-    if (consent) {
-      consent.addEventListener('click', function () {
-        consent.setAttribute('aria-pressed', consent.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-      });
-    }
+    var submitBtn = form.querySelector('[type="submit"]');
+    var startedAt = Date.now();
+
     function setError(name, msg) {
       var input = form.querySelector('[name="' + name + '"]');
       var err = form.querySelector('[data-error="' + name + '"]');
       if (input) input.setAttribute('aria-invalid', msg ? 'true' : 'false');
       if (err) err.textContent = msg || '';
     }
+    function formError(msg) { var box = $('[data-form-error]', form); if (box) box.textContent = msg || ''; }
     $$('.input', form).forEach(function (inp) {
-      inp.addEventListener('input', function () { setError(inp.getAttribute('name'), ''); });
+      inp.addEventListener('input', function () { setError(inp.getAttribute('name'), ''); formError(''); });
     });
+
+    function showSuccess() {
+      if (!success) return;
+      form.hidden = true; success.hidden = false;
+      var y = success.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
+      window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    }
+    function setBusy(on) {
+      if (!submitBtn) return;
+      submitBtn.disabled = on;
+      if (on) { submitBtn.dataset.label = submitBtn.dataset.label || submitBtn.textContent; submitBtn.textContent = 'Sending…'; }
+      else if (submitBtn.dataset.label) { submitBtn.textContent = submitBtn.dataset.label; }
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var v = function (n) { return form[n] ? form[n].value : ''; };
+      formError('');
+      var v = function (n) { return form[n] ? String(form[n].value) : ''; };
+
+      // Honeypot + timing trap: silently accept bots without sending.
+      var hp = form.querySelector('[name="company_website"]');
+      var tooFast = (Date.now() - startedAt) / 1000 < (CFG.minFormSeconds || 3);
+      if ((hp && hp.value) || tooFast) { showSuccess(); return; }
+
       var ok = true;
       if (!v('fullName').trim()) { setError('fullName', 'Please enter your name'); ok = false; }
       if (!v('business').trim()) { setError('business', 'Tell us your business name'); ok = false; }
@@ -154,26 +217,51 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v('email'))) { setError('email', 'Enter a valid email address'); ok = false; }
       if (!ok) { var first = form.querySelector('[aria-invalid="true"]'); if (first) first.focus(); return; }
 
-      /* Static demo (GitHub Pages has no backend). To make this live, POST the
-         fields to a handler — e.g. Formspree, your CRM webhook, or a serverless
-         function — and also fire the Meta Pixel "Lead" event here. */
-      if (success) {
-        form.hidden = true;
-        success.hidden = false;
-        var y = success.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
-        window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
-      }
+      var consentEl = form.querySelector('[name="smsConsent"]');
+      var consentTextEl = $('.consent__text', form);
+      var consented = !!(consentEl && consentEl.checked);
+      var payload = {
+        fullName: v('fullName').trim(),
+        business: v('business').trim(),
+        phone: v('phone').trim(),
+        email: v('email').trim().toLowerCase(),
+        smsConsent: consented,
+        consentText: consented && consentTextEl ? consentTextEl.textContent.trim() : '',
+        sourcePage: key,
+        pageUrl: location.href,
+        attribution: ATTRIBUTION,
+        submittedAt: new Date().toISOString(),
+        eventId: 'lead-' + Date.now() + '-' + Math.round(Math.random() * 1e6)
+      };
+
+      // DEMO mode (no backend configured): show success without sending.
+      if (!CFG.live || !CFG.leadEndpoint) { fireLeadAnalytics(payload.eventId); showSuccess(); return; }
+
+      // LIVE mode: POST to the Supabase Edge Function (see config.js / PROVISION.md).
+      setBusy(true);
+      fetch(CFG.leadEndpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      }).then(function (r) {
+        if (!r.ok) throw new Error('status ' + r.status);
+        return r.json().catch(function () { return {}; });
+      }).then(function () {
+        fireLeadAnalytics(payload.eventId); showSuccess();
+      }).catch(function () {
+        setBusy(false);
+        formError('Sorry — something went wrong sending your request. Please try again, or call us at the number below.');
+      });
     });
+
     if (success) {
       var resetBtn = $('[data-reset]', success);
       if (resetBtn) {
         resetBtn.addEventListener('click', function () {
           form.reset();
-          if (consent) consent.setAttribute('aria-pressed', 'false');
           $$('.input', form).forEach(function (i) { i.setAttribute('aria-invalid', 'false'); });
           $$('[data-error]', form).forEach(function (er) { er.textContent = ''; });
-          success.hidden = true;
-          form.hidden = false;
+          formError(''); setBusy(false);
+          success.hidden = true; form.hidden = false;
+          startedAt = Date.now();
         });
       }
     }

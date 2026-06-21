@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+.env.*
+*.key
+
+# Scratch / screenshot harness
+_shot.html
+admin/_shot.html
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.log

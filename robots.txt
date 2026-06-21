@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /admin/
 
-Sitemap: https://quickscalem.com/sitemap.xml
+Sitemap: https://g0osey99.github.io/quickscale-media/sitemap.xml

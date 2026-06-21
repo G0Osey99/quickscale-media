@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "note": "Canonical registry of every replaceable media asset on the public site. The admin media uploader WRITES this file; the public pages READ it so media can be swapped without editing markup. type: image|video. aspect: required ratio. 'current' is the published asset path (null = still a placeholder). 'alt' is required for images before publish.",
+  "slots": [
+    { "id": "home-hero-reel", "page": "Home", "label": "Hero reel — job-site footage", "type": "video", "aspect": "4:3", "current": null, "alt": "" },
+    { "id": "home-proof-before", "page": "Home", "label": "Proof band — BEFORE", "type": "image", "aspect": "3:4", "current": null, "alt": "" },
+    { "id": "home-proof-after", "page": "Home", "label": "Proof band — AD RESULT", "type": "image", "aspect": "3:4", "current": null, "alt": "" },
+    { "id": "home-logo-1", "page": "Home", "label": "Client logo 1", "type": "image", "aspect": "free", "current": null, "alt": "" },
+    { "id": "home-logo-2", "page": "Home", "label": "Client logo 2", "type": "image", "aspect": "free", "current": null, "alt": "" },
+    { "id": "home-logo-3", "page": "Home", "label": "Client logo 3", "type": "image", "aspect": "free", "current": null, "alt": "" },
+    { "id": "home-logo-4", "page": "Home", "label": "Client logo 4", "type": "image", "aspect": "free", "current": null, "alt": "" },
+    { "id": "home-differentiator-reel", "page": "Home", "label": "Content day — on-site filming", "type": "video", "aspect": "16:10", "current": null, "alt": "" },
+    { "id": "home-team-daniel", "page": "Home", "label": "Team teaser — Daniel", "type": "image", "aspect": "1:1", "current": null, "alt": "" },
+    { "id": "home-team-ty", "page": "Home", "label": "Team teaser — Ty", "type": "image", "aspect": "1:1", "current": null, "alt": "" },
+    { "id": "services-content-reel", "page": "Services", "label": "In-house content reel", "type": "video", "aspect": "4:3", "current": null, "alt": "" },
+    { "id": "process-step-1", "page": "Process", "label": "Step 1 — Strategy Call", "type": "image", "aspect": "16:7", "current": null, "alt": "" },
+    { "id": "process-step-2", "page": "Process", "label": "Step 2 — Content Day", "type": "image", "aspect": "16:7", "current": null, "alt": "" },
+    { "id": "process-step-3", "page": "Process", "label": "Step 3 — Campaign Launch", "type": "image", "aspect": "16:7", "current": null, "alt": "" },
+    { "id": "process-step-4", "page": "Process", "label": "Step 4 — Follow-Up & Optimization", "type": "image", "aspect": "16:7", "current": null, "alt": "" },
+    { "id": "about-founders", "page": "About", "label": "Founders on a job site", "type": "image", "aspect": "4:3", "current": null, "alt": "" },
+    { "id": "about-daniel", "page": "About", "label": "Daniel Demidovich headshot", "type": "image", "aspect": "1:1", "current": null, "alt": "" },
+    { "id": "about-ty", "page": "About", "label": "Ty Eckert headshot", "type": "image", "aspect": "1:1", "current": null, "alt": "" },
+    { "id": "global-og-image", "page": "Global", "label": "Social share image (Open Graph)", "type": "image", "aspect": "1200x630", "current": "assets/img/og-image.png", "alt": "QuickScale Media" },
+    { "id": "global-favicon", "page": "Global", "label": "Favicon", "type": "image", "aspect": "32x32", "current": "assets/img/favicon-32.png", "alt": "QuickScale Media icon" },
+    { "id": "global-apple-touch", "page": "Global", "label": "Apple touch icon", "type": "image", "aspect": "180x180", "current": "assets/img/apple-touch-icon.png", "alt": "QuickScale Media icon" }
+  ]
+}
