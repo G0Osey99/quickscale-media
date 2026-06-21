@@ -7,10 +7,10 @@
    NEVER put secret keys here — this file is publicly served.
    ============================================================ */
 window.QS_CONFIG = {
-  live: false,              // false = demo mode (no network); true = POST to leadEndpoint
-  leadEndpoint: "",         // e.g. "https://YOUR-PROJECT.functions.supabase.co/submit-lead"
-  turnstileSiteKey: "",     // Cloudflare Turnstile PUBLIC site key (optional anti-bot widget)
-  metaPixelId: "",          // Meta Pixel ID (public) — enables Pixel PageView + Lead events
-  ga4MeasurementId: "",     // GA4 Measurement ID, e.g. "G-XXXXXXXXXX" (public)
+  live: true,               // true = POST to leadEndpoint (Supabase Edge Function)
+  leadEndpoint: "https://mymhjqwhhkwiqozynkul.supabase.co/functions/v1/submit-lead",
+  turnstileSiteKey: "",     // Cloudflare Turnstile PUBLIC site key — add in the anti-bot phase
+  metaPixelId: "",          // Meta Pixel ID (public) — add with tracking
+  ga4MeasurementId: "",     // GA4 Measurement ID, e.g. "G-XXXXXXXXXX" — add with tracking
   minFormSeconds: 3         // anti-bot timing trap: min seconds a human takes to submit
 };

@@ -15,21 +15,26 @@
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Fail-closed default (not '*'); PROVISION sets the ALLOWED_ORIGIN secret per environment.
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "https://g0osey99.github.io";
+// Allowlist of site origins (staging + production). Override with the ALLOWED_ORIGINS
+// secret (comma-separated) if needed; the defaults already cover both domains.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ||
+  "https://quickscalem.com,https://www.quickscalem.com,https://scalequick.cc,https://www.scalequick.cc,https://quickscale-media.minedude.workers.dev,http://localhost:8080")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const TURNSTILE_SECRET = Deno.env.get("TURNSTILE_SECRET") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const NOTIFY_EMAIL = Deno.env.get("NOTIFY_EMAIL") ?? "";
 const FROM_EMAIL = Deno.env.get("FROM_EMAIL") ?? "leads@quickscalem.com";
 
-const cors = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type",
-  "Vary": "Origin",
-};
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
+// CORS reflects the request Origin when it's in the allowlist (so staging + prod both work).
+function corsHeaders(origin: string | null) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    "Vary": "Origin",
+  };
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,6 +60,9 @@ function clientIp(req: Request): string {
 }
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req.headers.get("Origin"));
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
