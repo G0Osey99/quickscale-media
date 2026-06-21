@@ -20,18 +20,20 @@ exception when duplicate_object then null; end $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
+  email text,                 -- mirrored from auth.users for the admin Users view
   role app_role not null default 'viewer',
   created_at timestamptz not null default now()
 );
+alter table public.profiles add column if not exists email text;
 alter table public.profiles enable row level security;
 
 -- New auth users get a profile automatically (default role viewer; promote in SQL).
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, full_name)
-  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', new.email))
-  on conflict (id) do nothing;
+  insert into public.profiles (id, full_name, email)
+  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', new.email), new.email)
+  on conflict (id) do update set email = excluded.email;
   return new;
 end $$;
 drop trigger if exists on_auth_user_created on auth.users;
@@ -140,10 +142,41 @@ create policy "audit: owner reads" on public.audit_log
 create policy "audit: staff append" on public.audit_log
   for insert to authenticated with check (public.is_staff() and actor = auth.uid());
 
--- ---------- storage bucket for uploads (run once) ----------
--- insert into storage.buckets (id, name, public) values ('media','media', true)
---   on conflict (id) do nothing;
--- Then add storage policies: public read, staff write. (See PROVISION.md.)
+-- ---------- storage bucket for uploads ----------
+insert into storage.buckets (id, name, public) values ('media','media', true)
+  on conflict (id) do nothing;
+-- Public object URLs are served by the storage CDN (no SELECT policy needed). Staff manage
+-- uploads; listing via the Storage API is restricted to staff.
+drop policy if exists "media staff read" on storage.objects;
+drop policy if exists "media staff insert" on storage.objects;
+drop policy if exists "media staff update" on storage.objects;
+drop policy if exists "media staff delete" on storage.objects;
+create policy "media staff read" on storage.objects
+  for select to authenticated using (bucket_id = 'media' and public.is_staff());
+create policy "media staff insert" on storage.objects
+  for insert to authenticated with check (bucket_id = 'media' and public.is_staff());
+create policy "media staff update" on storage.objects
+  for update to authenticated using (bucket_id = 'media' and public.is_staff())
+  with check (bucket_id = 'media' and public.is_staff());
+create policy "media staff delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'media' and public.is_staff());
+
+-- ---------- site_content (editable site copy + settings for the admin) ----------
+create table if not exists public.site_content (
+  id text primary key,
+  doc jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id)
+);
+alter table public.site_content enable row level security;
+create policy "content public read" on public.site_content
+  for select to anon, authenticated using (true);
+create policy "content staff write" on public.site_content
+  for all to authenticated using (public.is_staff()) with check (public.is_staff());
+insert into public.site_content (id, doc) values ('site', '{}'::jsonb) on conflict (id) do nothing;
+
+-- The admin Users view invites teammates via the `admin-invite` Edge Function
+-- (supabase/functions/admin-invite) — caller must be a signed-in owner.
 
 -- ============================================================
 -- AFTER you create the first admin user in the Supabase dashboard,
