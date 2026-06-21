@@ -197,10 +197,13 @@
       return (el.getAttribute('data-prefix') || '') + num + (el.getAttribute('data-suffix') || '');
     }
     function animate(el) {
+      if (!el.hasAttribute('data-count')) return;   // admin override removed it — leave the text as-is
       var target = parseFloat(el.getAttribute('data-count'));
+      if (isNaN(target)) return;
       if (reduce) { el.textContent = fmt(el, target); return; }
       var dur = 1100, t0 = null, ease = function (x) { return 1 - Math.pow(1 - x, 3); };
       (function tick(now) {
+        if (!el.hasAttribute('data-count')) return;   // admin override removed it mid-flight → stop
         if (t0 === null) t0 = now;
         var p = Math.min(1, (now - t0) / dur);
         el.textContent = fmt(el, target * ease(p));
@@ -211,7 +214,7 @@
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (en) {
           if (en.isIntersecting) animate(en.target);
-          else if (!reduce) en.target.textContent = fmt(en.target, 0);
+          else if (!reduce && en.target.hasAttribute('data-count')) en.target.textContent = fmt(en.target, 0);
         });
       }, { threshold: 0.35 });
       statEls.forEach(function (el) { io.observe(el); });
@@ -415,6 +418,7 @@
       host.appendChild(m);
     });
   }
+  function cpath(o, p) { return p.split('.').reduce(function (a, k) { return a == null ? a : a[k]; }, o); }
   function applyContent(doc) {
     if (!doc) return;
     var b = doc.business || {}, soc = doc.social || {};
@@ -422,6 +426,33 @@
     if (b.email) $$('a[href^="mailto:"]').forEach(function (a) { a.setAttribute('href', 'mailto:' + b.email); if (a.textContent.indexOf('@') >= 0) a.textContent = b.email; });
     if (soc.facebook) $$('a.social[aria-label*="Facebook"]').forEach(function (a) { a.setAttribute('href', soc.facebook); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
     if (soc.instagram) $$('a.social[aria-label*="Instagram"]').forEach(function (a) { a.setAttribute('href', soc.instagram); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
+
+    // Hero + stats: plain-text override, ONLY when the stored value differs from the HTML default
+    // (so the highlight span, the count-up, and the SEO copy survive until the admin actually edits).
+    $$('[data-content]').forEach(function (node) {
+      var val = cpath(doc, node.getAttribute('data-content'));
+      if (val == null) return; val = String(val);
+      if (!val.trim() || val.trim() === node.textContent.trim()) return;
+      if (node.hasAttribute('data-count')) node.removeAttribute('data-count'); // stop the count-up from re-overwriting
+      node.textContent = val;
+    });
+
+    // Testimonials: keep the carousel's nodes, just refresh the text (re-add quotes / bold company).
+    var ts = doc.testimonials || [];
+    $$('[data-tquote]').forEach(function (node) {
+      var t = ts[+node.getAttribute('data-tquote')]; if (!t || !t.quote) return;
+      var cur = node.textContent.replace(/^[\s"'“”]+|[\s"'“”]+$/g, '');
+      if (cur === String(t.quote).trim()) return;
+      node.textContent = '"' + t.quote + '"';
+    });
+    $$('[data-tmeta]').forEach(function (node) {
+      var t = ts[+node.getAttribute('data-tmeta')]; if (!t || !t.name) return;
+      var want = '— ' + t.name + (t.role ? ', ' + t.role : '');
+      if (node.textContent.replace(/\s+/g, ' ').trim() === want.trim()) return;
+      while (node.firstChild) node.removeChild(node.firstChild);
+      node.appendChild(document.createTextNode('— ' + t.name + (t.role ? ', ' : '')));
+      if (t.role) { var bold = document.createElement('b'); bold.textContent = t.role; node.appendChild(bold); }
+    });
   }
 
   /* ---- Footer year ---- */
