@@ -24,6 +24,12 @@ const TURNSTILE_SECRET = Deno.env.get("TURNSTILE_SECRET") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const NOTIFY_EMAIL = Deno.env.get("NOTIFY_EMAIL") ?? "";
 const FROM_EMAIL = Deno.env.get("FROM_EMAIL") ?? "leads@quickscalem.com";
+// Meta Conversions API (server-side "Lead", deduped with the browser Pixel via event_id).
+// Only fires when BOTH the Pixel ID and a CAPI access token are set as secrets.
+const META_PIXEL_ID = Deno.env.get("META_PIXEL_ID") ?? "";
+const META_CAPI_TOKEN = Deno.env.get("META_CAPI_TOKEN") ?? "";
+const META_TEST_EVENT_CODE = Deno.env.get("META_TEST_EVENT_CODE") ?? "";
+const META_API_VERSION = "v19.0";
 
 // CORS reflects the request Origin when it's in the allowlist (so staging + prod both work).
 function corsHeaders(origin: string | null) {
@@ -65,6 +71,10 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+
+  // Reject browser callers from non-allowlisted origins (a missing Origin = non-browser, allowed).
+  const reqOrigin = req.headers.get("Origin");
+  if (reqOrigin && !ALLOWED_ORIGINS.includes(reqOrigin)) return json({ error: "forbidden_origin" }, 403);
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
@@ -129,9 +139,12 @@ Deno.serve(async (req) => {
   const { data, error } = await db.from("leads").insert(record).select("id").single();
   if (error) { console.error("insert_failed", error); return json({ error: "server_error" }, 500); }
 
-  // THEN notify (best-effort; failure does not fail the request).
+  // THEN notify (best-effort + concurrent; a downstream failure never fails the request).
+  const notify: Promise<unknown>[] = [];
+
+  // (a) New-lead email alert via Resend.
   if (RESEND_API_KEY && NOTIFY_EMAIL) {
-    try {
+    notify.push((async () => {
       const attr = record.attribution as Record<string, unknown>;
       const campaign = (attr && attr.utm_campaign) ? String(attr.utm_campaign) : "-";
       const lines = [
@@ -160,7 +173,58 @@ Deno.serve(async (req) => {
           }),
         });
       } finally { clearTimeout(timer); }
-    } catch (e) { console.error("notify_failed", e); }
+    })());
+  }
+
+  // (b) Meta Conversions API — server-side "Lead" reusing the Pixel's event_id so Meta
+  // dedupes the browser + server events. PII (email/phone) is SHA-256 hashed per spec.
+  if (META_PIXEL_ID && META_CAPI_TOKEN && record.event_id) {
+    notify.push((async () => {
+      const digits = phoneRaw.replace(/\D/g, "");
+      const phoneNorm = digits.length === 10 ? "1" + digits : digits; // assume US for 10-digit
+      const attr = record.attribution as Record<string, unknown>;
+      const fbclid = attr && typeof attr.fbclid === "string" ? attr.fbclid : "";
+      const landedMs = attr && typeof attr.landingAt === "string" ? Date.parse(attr.landingAt) : NaN;
+      const fbcTime = Number.isFinite(landedMs) ? landedMs : Date.now(); // observed click time if known
+      const fbp = clean(body.fbp, 100);
+      const userData: Record<string, unknown> = {
+        em: [await sha256(email)],
+        ph: [await sha256(phoneNorm)],
+        client_ip_address: rawIp,
+        client_user_agent: record.user_agent,
+      };
+      if (fbclid) userData.fbc = "fb.1." + fbcTime + "." + fbclid;
+      if (fbp) userData.fbp = fbp;
+      const payload: Record<string, unknown> = {
+        data: [{
+          event_name: "Lead",
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: record.event_id,
+          action_source: "website",
+          event_source_url: record.page_url || undefined,
+          user_data: userData,
+        }],
+      };
+      if (META_TEST_EVENT_CODE) payload.test_event_code = META_TEST_EVENT_CODE;
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 5000);
+      try {
+        await fetch(
+          "https://graph.facebook.com/" + META_API_VERSION + "/" + META_PIXEL_ID +
+            "/events?access_token=" + encodeURIComponent(META_CAPI_TOKEN),
+          {
+            method: "POST",
+            signal: ctl.signal,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+      } finally { clearTimeout(timer); }
+    })());
+  }
+
+  if (notify.length) {
+    try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); }
   }
 
   return json({ ok: true, id: data?.id });

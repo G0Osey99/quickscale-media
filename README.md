@@ -39,8 +39,9 @@ Prototype/
 
 Pages use **folder + `index.html`** so URLs are clean slugs (`/services/`, `/process/`, …),
 and links/assets are **relative**, so it works at a domain root *or* a project subpath
-(`user.github.io/repo/`). Canonical/OG/sitemap currently point at the **github.io demo URL**
-(`g0osey99.github.io/quickscale-media`); swap to `quickscalem.com` when the domain is live.
+(`user.github.io/repo/`). Canonical/OG/sitemap now point at the production domain
+`https://quickscalem.com` and the `404.html` base path is `/`. (See `../PRODUCTION_READINESS.md`
+for current launch status and the remaining placeholders to replace.)
 
 ## Admin panel & backend
 

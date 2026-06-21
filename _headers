@@ -23,3 +23,9 @@
 # Admin is never indexed, on any domain (overrides the noindex value above for /admin/*).
 /admin/*
   X-Robots-Tag: noindex, nofollow
+
+# Long-lived static assets — cache with revalidation. Filenames are unhashed, so keep a
+# moderate max-age (a CSS/JS edit still propagates within a day). Raise to immutable/1yr
+# only after introducing content-hashed filenames.
+/assets/*
+  Cache-Control: public, max-age=86400, must-revalidate
