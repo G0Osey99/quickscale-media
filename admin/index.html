@@ -14,14 +14,14 @@
 <link rel="stylesheet" href="assets/admin.css">
 </head>
 <body>
-  <div class="proto-banner" role="note">
-    <strong>FRONT-END PROTOTYPE</strong> — demo data only, <strong>not connected to a backend and not secured</strong>. Activate the real Supabase backend per <code>PROVISION.md</code>.
-  </div>
+  <div id="demo-banner" role="note"></div>
   <div id="app" aria-live="polite"></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- config.js carries the (public) Supabase URL/anon key once live; the prototype ignores it and uses mock data. -->
+  <!-- config.js carries the public Supabase URL + anon key; admin.js connects to Supabase when
+       they're present, and falls back to mock-data.js for an offline demo when they're not. -->
   <script src="../assets/js/config.js" defer></script>
+  <script src="assets/supabase.js" defer></script>
   <script src="assets/mock-data.js" defer></script>
   <script src="assets/admin.js" defer></script>
 </body>

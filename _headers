@@ -18,11 +18,15 @@
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Robots-Tag: noindex
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://www.facebook.com https://*.supabase.co; connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.facebook.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://www.facebook.com https://*.supabase.co; media-src 'self' https://*.supabase.co; connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.facebook.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
 
 # Admin is never indexed, on any domain (overrides the noindex value above for /admin/*).
+# Stricter near-self CSP: the admin loads only vendored JS (Supabase) + Google Fonts and talks
+# to its Supabase project (auth/db/storage/functions). Put it behind Cloudflare Access as well.
 /admin/*
   X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
 
 # Long-lived static assets — cache with revalidation. Filenames are unhashed, so keep a
 # moderate max-age (a CSS/JS edit still propagates within a day). Raise to immutable/1yr
