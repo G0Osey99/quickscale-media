@@ -6,7 +6,7 @@
 :root{
   --bg:#f4f1ea; --panel:#fff; --ink:#1b1813; --ink-soft:#4a4438; --muted:#6f6757; --muted-2:#8a8068;
   --border:#e7e1d3; --border-2:#ded7c6;
-  --yellow:#FFC400; --yellow-600:#f1b500; --yellow-tint:#FFF3CC; --gold:#b89200;
+  --yellow:#FCCC18; --yellow-600:#e8b70f; --yellow-tint:#FEF3C7; --gold:#b89200;
   --dark:#1b1813; --darker:#15140f; --on-dark:#e7e1d3; --on-dark-mute:#a89f88;
   --green:#1b8a4c; --green-tint:#e7f6ec; --blue:#2563a8; --blue-tint:#e6eef7; --red:#d6492f; --red-tint:#fbe9e5;
   --radius:14px; --radius-sm:10px;
@@ -27,7 +27,7 @@ a{color:inherit;}
 
 /* Buttons */
 .abtn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--ff-display);font-weight:700;font-size:14px;line-height:1;border:none;border-radius:var(--radius-sm);cursor:pointer;padding:11px 16px;min-height:40px;text-decoration:none;transition:background .15s,transform .15s,box-shadow .15s,color .15s,border-color .15s;}
-.abtn--primary{background:var(--yellow);color:var(--ink);box-shadow:0 4px 12px rgba(255,196,0,.3);}
+.abtn--primary{background:var(--yellow);color:var(--ink);box-shadow:0 4px 12px rgba(252,204,24,.3);}
 .abtn--primary:hover{background:var(--yellow-600);transform:translateY(-1px);}
 .abtn--ghost{background:transparent;color:var(--ink);border:1.5px solid var(--border-2);}
 .abtn--ghost:hover{background:#fff;border-color:var(--ink);}
@@ -128,7 +128,7 @@ table.table{width:100%;border-collapse:collapse;font-size:14px;}
 .field{margin-bottom:14px;}
 .field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;}
 .input,textarea.input,select.input{width:100%;font-family:var(--ff-body);font-size:15px;color:var(--ink);background:#fff;border:1.5px solid var(--border-2);border-radius:var(--radius-sm);padding:11px 12px;outline:none;transition:border-color .15s,box-shadow .15s;}
-.input:focus{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(255,196,0,.22);}
+.input:focus{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(252,204,24,.22);}
 textarea.input{min-height:84px;resize:vertical;line-height:1.5;}
 .field__row{display:flex;gap:12px;flex-wrap:wrap;}
 .field__row>.field{flex:1 1 180px;}
