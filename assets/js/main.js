@@ -23,15 +23,19 @@
         utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
         utm_term: g('utm_term'), utm_content: g('utm_content'),
         fbclid: g('fbclid'), gclid: g('gclid'), msclkid: g('msclkid'),
-        referrer: document.referrer || '', landingPage: location.pathname + location.search
+        referrer: document.referrer || '', landingPage: location.pathname + location.search,
+        landingAt: new Date().toISOString()
       };
       sessionStorage.setItem(KEY, JSON.stringify(attr));
       return attr;
     } catch (e) { return {}; }
   })();
 
-  /* ---- Analytics: load ONLY if public IDs are configured (off in demo) ---- */
-  (function initAnalytics() {
+  /* ---- Analytics: loaded only AFTER consent (see consentGate below) and only if
+     public IDs are configured. Defined as a function so the consent gate controls it. ---- */
+  var analyticsLoaded = false;
+  function loadAnalytics() {
+    if (analyticsLoaded) return; analyticsLoaded = true;
     if (CFG.metaPixelId) {
       !function (f, b, e, v, n, t, s) {
         if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
@@ -48,7 +52,70 @@
       window.gtag = function () { window.dataLayer.push(arguments); };
       window.gtag('js', new Date()); window.gtag('config', CFG.ga4MeasurementId);
     }
+  }
+
+  /* ---- Cookie/analytics consent: gate non-essential tags until the visitor chooses.
+     Only appears when a Pixel/GA id is configured (nothing to consent to otherwise),
+     and the choice is remembered in localStorage. ---- */
+  (function consentGate() {
+    if (!(CFG.metaPixelId || CFG.ga4MeasurementId)) return;   // no non-essential tags → nothing to gate
+    var KEY = 'qs_consent', choice = null;
+    try { choice = localStorage.getItem(KEY); } catch (e) {}
+    if (choice === 'granted') { loadAnalytics(); return; }
+    if (choice === 'denied') { return; }
+    buildConsentBanner(function (granted) {
+      try { localStorage.setItem(KEY, granted ? 'granted' : 'denied'); } catch (e) {}
+      if (granted) loadAnalytics();
+    });
   })();
+
+  function buildConsentBanner(decide) {
+    var bar = document.createElement('div');
+    bar.className = 'qs-consent';
+    bar.setAttribute('role', 'region');
+    bar.setAttribute('aria-label', 'Cookie consent');
+    var text = document.createElement('p');
+    text.className = 'qs-consent__text';
+    text.appendChild(document.createTextNode('We use cookies to measure site and ad performance. See our '));
+    var link = document.createElement('a');
+    // Relative path (matches every other internal link) so it works at a domain root OR a subpath.
+    var fp = document.querySelector('.footer-legal a[href$="privacy/"]') || document.querySelector('a[href$="privacy/"]');
+    link.setAttribute('href', fp ? fp.getAttribute('href') : 'privacy/');
+    link.textContent = 'Privacy Policy';
+    text.appendChild(link); text.appendChild(document.createTextNode('.'));
+    var actions = document.createElement('div');
+    actions.className = 'qs-consent__actions';
+    var decline = document.createElement('button');
+    decline.type = 'button'; decline.className = 'qs-consent__decline'; decline.textContent = 'Decline';
+    var accept = document.createElement('button');
+    accept.type = 'button'; accept.className = 'btn btn--primary'; accept.textContent = 'Accept';
+    actions.appendChild(decline); actions.appendChild(accept);
+    bar.appendChild(text); bar.appendChild(actions);
+    function close(granted) { decide(granted); if (bar.parentNode) bar.parentNode.removeChild(bar); }
+    accept.addEventListener('click', function () { close(true); });
+    decline.addEventListener('click', function () { close(false); });
+    document.body.appendChild(bar);
+  }
+
+  /* ---- Phone-tap conversion tracking (once per session per number, persisted in
+     sessionStorage). Meta 'Contact' marks call intent (keeps 'Lead' for form submits);
+     GA4 fires 'generate_lead'. ---- */
+  function phoneAlreadyFired(num) {
+    try {
+      var k = 'qs_phone_fired';
+      var set = JSON.parse(sessionStorage.getItem(k) || '[]');
+      if (set.indexOf(num) !== -1) return true;
+      set.push(num); sessionStorage.setItem(k, JSON.stringify(set));
+      return false;
+    } catch (e) { return false; }
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="tel:"]') : null;
+    if (!a) return;
+    if (phoneAlreadyFired(a.getAttribute('href'))) return;
+    try { if (window.fbq) window.fbq('track', 'Contact', { method: 'phone' }); } catch (e2) {}
+    try { if (window.gtag) window.gtag('event', 'generate_lead', { method: 'phone' }); } catch (e2) {}
+  });
 
   function fireLeadAnalytics(eventId) {
     try { if (window.fbq) window.fbq('track', 'Lead', {}, { eventID: eventId }); } catch (e) {}
@@ -59,15 +126,21 @@
   var toggle = $('.navtoggle');
   var drawer = $('#drawer');
   if (toggle && drawer) {
+    function closeDrawer(focusToggle) {
+      drawer.classList.remove('is-open');
+      toggle.setAttribute('aria-expanded', 'false');
+      if (focusToggle) toggle.focus();
+    }
     toggle.addEventListener('click', function () {
       var open = drawer.classList.toggle('is-open');
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { var first = drawer.querySelector('a, .btn'); if (first) first.focus(); }
     });
     drawer.addEventListener('click', function (e) {
-      if (e.target.closest('a, .btn')) {
-        drawer.classList.remove('is-open');
-        toggle.setAttribute('aria-expanded', 'false');
-      }
+      if (e.target.closest('a, .btn')) closeDrawer(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && drawer.classList.contains('is-open')) closeDrawer(true);
     });
   }
 
@@ -110,6 +183,8 @@
     dots.forEach(function (d, n) { d.addEventListener('click', function () { show(n); start(); }); });
     carousel.addEventListener('mouseenter', stop);
     carousel.addEventListener('mouseleave', start);
+    carousel.addEventListener('focusin', stop);     // pause for keyboard users too
+    carousel.addEventListener('focusout', start);
     show(0); start();
   }
 
@@ -163,7 +238,7 @@
     steps.forEach(function (step) {
       step.addEventListener('click', function () {
         var i = step.getAttribute('data-step');
-        steps.forEach(function (s) { s.setAttribute('aria-current', s === step ? 'step' : 'false'); });
+        steps.forEach(function (s) { s.setAttribute('aria-selected', s === step ? 'true' : 'false'); });
         panels.forEach(function (p) { p.classList.toggle('is-active', p.getAttribute('data-panel') === i); });
       });
     });
@@ -223,6 +298,9 @@
     function showSuccess() {
       if (!success) return;
       form.hidden = true; success.hidden = false;
+      // Move focus into the confirmation so screen-reader users hear it (role="status" on the container).
+      if (!success.hasAttribute('tabindex')) success.setAttribute('tabindex', '-1');
+      try { success.focus({ preventScroll: true }); } catch (e) { success.focus(); }
       var y = success.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
       window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
     }
@@ -269,6 +347,7 @@
         attribution: ATTRIBUTION,
         submittedAt: new Date().toISOString(),
         turnstileToken: tToken || '',
+        fbp: (document.cookie.match(/(?:^|;\s*)_fbp=([^;]+)/) || [])[1] || '',  // for Meta CAPI match quality
         eventId: 'lead-' + Date.now() + '-' + Math.round(Math.random() * 1e6)
       };
 

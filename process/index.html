@@ -6,7 +6,7 @@
 <title>Our Process: Call → Content → Launch | QuickScale Media</title>
 <meta name="description" content="From first call to booked jobs in four steps: free strategy call, on-site content day, Meta campaign launch, then ongoing follow-up and optimization.">
 <link rel="canonical" href="https://quickscalem.com/process/">
-<meta name="theme-color" content="#FFC400">
+<meta name="theme-color" content="#FCCC18">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="QuickScale Media">
@@ -42,15 +42,12 @@
       ]
     },
     {
-      "@type": "HowTo",
-      "name": "How working with QuickScale Media works",
-      "description": "From first call to booked jobs in four steps.",
-      "step": [
-        { "@type": "HowToStep", "position": 1, "name": "Strategy Call", "text": "You book a call and we get to know your business — your service area, your goals, what's working and what isn't. If we're not a fit, we'll tell you honestly." },
-        { "@type": "HowToStep", "position": 2, "name": "Content Day", "text": "We drive out and film real content at your business or job site — crew at work, finished jobs, before-and-afters, owner clips." },
-        { "@type": "HowToStep", "position": 3, "name": "Campaign Launch", "text": "We build and launch your Facebook & Instagram campaigns — targeting, copy, and creative — engineered to generate qualified estimate requests in your area." },
-        { "@type": "HowToStep", "position": 4, "name": "Follow-Up & Optimization", "text": "We track every lead, test new ads, and tune what's working so your cost per booked job keeps dropping month over month." }
-      ]
+      "@type": "WebPage",
+      "@id": "https://quickscalem.com/process/#webpage",
+      "url": "https://quickscalem.com/process/",
+      "name": "Our Process: Call → Content → Launch | QuickScale Media",
+      "isPartOf": { "@id": "https://quickscalem.com/#website" },
+      "about": { "@id": "https://quickscalem.com/#organization" }
     }
   ]
 }
@@ -62,8 +59,7 @@
 <header class="site-header">
   <div class="site-header__inner">
     <a class="brand" href="../" aria-label="QuickScale Media — home">
-      <span class="brand__mark" aria-hidden="true">Q</span>
-      <span class="brand__name">QuickScale<b>&nbsp;Media</b></span>
+      <img class="brand__logo" src="../assets/img/banner-dark.png" alt="" width="609" height="160">
     </a>
     <nav class="nav" aria-label="Primary">
       <a class="nav__link" href="../">Home</a>
@@ -102,20 +98,20 @@
   <section class="section section--flush-top">
     <div class="wrap split split--top">
       <!-- step selector -->
-      <div class="steps">
-        <button class="step" data-step="0" aria-current="step">
+      <div class="steps" role="tablist" aria-label="Our process, step by step">
+        <button class="step" id="step-0" data-step="0" role="tab" aria-selected="true" aria-controls="steppanel-0">
           <span class="step__chip" aria-hidden="true">1</span>
           <span class="step__text"><span class="step__title">Strategy Call</span><span class="step__tag">~30 min, free</span></span>
         </button>
-        <button class="step" data-step="1" aria-current="false">
+        <button class="step" id="step-1" data-step="1" role="tab" aria-selected="false" aria-controls="steppanel-1">
           <span class="step__chip" aria-hidden="true">2</span>
           <span class="step__text"><span class="step__title">Content Day</span><span class="step__tag">we come to you</span></span>
         </button>
-        <button class="step" data-step="2" aria-current="false">
+        <button class="step" id="step-2" data-step="2" role="tab" aria-selected="false" aria-controls="steppanel-2">
           <span class="step__chip" aria-hidden="true">3</span>
           <span class="step__text"><span class="step__title">Campaign Launch</span><span class="step__tag">ads go live</span></span>
         </button>
-        <button class="step" data-step="3" aria-current="false">
+        <button class="step" id="step-3" data-step="3" role="tab" aria-selected="false" aria-controls="steppanel-3">
           <span class="step__chip" aria-hidden="true">4</span>
           <span class="step__text"><span class="step__title">Follow-Up &amp; Optimization</span><span class="step__tag">ongoing</span></span>
         </button>
@@ -123,28 +119,28 @@
 
       <!-- step detail -->
       <div class="stepdetail">
-        <div class="steppanel is-active" data-panel="0">
+        <div class="steppanel is-active" data-panel="0" id="steppanel-0" role="tabpanel" aria-labelledby="step-0" tabindex="0">
           <div class="stepdetail__card">
             <div class="stepdetail__head"><span class="stepdetail__num" aria-hidden="true">1</span><h2 class="h2">Strategy Call</h2></div>
             <p>You book a call and we get to know your business — your service area, your goals, what's working and what isn't. If we're not a fit, we'll tell you honestly.</p>
             <div class="media media--dashed ar-16-7"><span class="media__kicker">Call / discovery footage</span></div>
           </div>
         </div>
-        <div class="steppanel" data-panel="1">
+        <div class="steppanel" data-panel="1" id="steppanel-1" role="tabpanel" aria-labelledby="step-1" tabindex="0">
           <div class="stepdetail__card">
             <div class="stepdetail__head"><span class="stepdetail__num" aria-hidden="true">2</span><h2 class="h2">Content Day</h2></div>
             <p>We drive out and film real content at your business or job site — crew at work, finished jobs, before-and-afters, owner clips. This is the footage that makes your ads outperform stock.</p>
             <div class="media media--dashed ar-16-7"><span class="media__kicker">On-site filming · job site</span></div>
           </div>
         </div>
-        <div class="steppanel" data-panel="2">
+        <div class="steppanel" data-panel="2" id="steppanel-2" role="tabpanel" aria-labelledby="step-2" tabindex="0">
           <div class="stepdetail__card">
             <div class="stepdetail__head"><span class="stepdetail__num" aria-hidden="true">3</span><h2 class="h2">Campaign Launch</h2></div>
             <p>We build and launch your Facebook &amp; Instagram campaigns — targeting, copy, and creative — engineered to generate qualified estimate requests in your area.</p>
             <div class="media media--dashed ar-16-7"><span class="media__kicker">Campaign dashboard / ad set</span></div>
           </div>
         </div>
-        <div class="steppanel" data-panel="3">
+        <div class="steppanel" data-panel="3" id="steppanel-3" role="tabpanel" aria-labelledby="step-3" tabindex="0">
           <div class="stepdetail__card">
             <div class="stepdetail__head"><span class="stepdetail__num" aria-hidden="true">4</span><h2 class="h2">Follow-Up &amp; Optimization</h2></div>
             <p>We track every lead, test new ads, and tune what's working so your cost per booked job keeps dropping month over month. You just keep showing up to the jobs.</p>
@@ -166,8 +162,7 @@
   <div class="site-footer__top">
     <div class="site-footer__about">
       <div class="footer-brand">
-        <span class="footer-brand__mark" aria-hidden="true">Q</span>
-        <span class="footer-brand__name">QuickScale Media</span>
+        <img class="footer-brand__logo" src="../assets/img/banner-light.png" alt="QuickScale Media" width="607" height="160">
       </div>
       <p>Facebook &amp; Instagram ads + in-house content for home service businesses. Lititz, PA.</p>
       <div class="socials">

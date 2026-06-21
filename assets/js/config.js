@@ -1,9 +1,10 @@
 /* ============================================================
    QuickScale Media — runtime config (PUBLIC values only).
-   Demo mode by default: the lead forms validate and show the
-   success state WITHOUT sending anywhere. After wiring the
-   Supabase backend (see PROVISION.md), set live:true and fill
-   in the endpoint + public keys below.
+   LIVE mode is enabled: the lead forms POST to the Supabase
+   Edge Function (leadEndpoint) below. To return to demo mode
+   (validate + show success WITHOUT sending), set live:false.
+   Add metaPixelId / ga4MeasurementId to turn analytics on —
+   they load only AFTER the visitor accepts the cookie banner.
    NEVER put secret keys here — this file is publicly served.
    ============================================================ */
 window.QS_CONFIG = {

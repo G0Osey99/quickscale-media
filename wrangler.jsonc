@@ -1,0 +1,19 @@
+{
+  // Cloudflare Workers Static Assets — serves this static site (no server code).
+  // Triggered by the build's `npx wrangler versions upload` (Workers Builds).
+  //
+  // IMPORTANT: "name" must match the Worker/project name in the Cloudflare
+  // dashboard (Workers & Pages). If your project is named differently, change
+  // this one line to match, or the deploy will target the wrong Worker.
+  //
+  // The site files live at the repo root, so the assets directory is ".".
+  // `_headers` (CSP + security headers + /assets/* caching + /admin/* noindex)
+  // and `_redirects` are read automatically by Workers Static Assets.
+  // `.assetsignore` keeps backend/docs source out of the public bundle.
+  "name": "quickscale-media",
+  "compatibility_date": "2026-06-21",
+  "assets": {
+    "directory": ".",
+    "not_found_handling": "404-page"
+  }
+}
