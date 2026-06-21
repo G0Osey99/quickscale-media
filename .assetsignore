@@ -1,0 +1,8 @@
+# Files NOT served as public static assets (gitignore-style patterns).
+# Workers Static Assets uploads the whole directory unless excluded here.
+.assetsignore
+wrangler.jsonc
+.gitignore
+.nojekyll
+*.md
+supabase/
