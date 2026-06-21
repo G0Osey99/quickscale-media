@@ -1,0 +1,23 @@
+# Cloudflare Pages response headers — QuickScale Media
+#
+# The repo already uses PRODUCTION URLs (quickscalem.com). While we're testing on
+# scalequick.cc (a noindexed backup/staging domain), the whole site is set noindex.
+#
+# AT LAUNCH (attaching quickscalem.com), do TWO things:
+#   1) DELETE the "X-Robots-Tag: noindex" line in the /* block below (makes the live site indexable).
+#   2) Add Content-Security-Policy + Strict-Transport-Security once the Supabase/Pixel/GA
+#      endpoints exist (LAUNCH_PLAYBOOK.md Phase 6). Admin keeps the stricter CSP (PROVISION.md §8).
+# To keep scalequick.cc itself permanently out of Google after launch, add a host-scoped
+# Cloudflare Transform Rule on the scalequick.cc zone instead (so production stays indexable).
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  X-Robots-Tag: noindex
+
+# Admin is never indexed, on any domain.
+/admin/*
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
