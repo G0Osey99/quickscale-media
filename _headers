@@ -1,23 +1,25 @@
-# Cloudflare Pages response headers — QuickScale Media
+# Cloudflare response headers — QuickScale Media
 #
-# The repo already uses PRODUCTION URLs (quickscalem.com). While we're testing on
-# scalequick.cc (a noindexed backup/staging domain), the whole site is set noindex.
+# The repo uses PRODUCTION URLs (quickscalem.com). While we test on scalequick.cc (a
+# noindexed backup/staging domain), the whole site is set noindex.
 #
-# AT LAUNCH (attaching quickscalem.com), do TWO things:
-#   1) DELETE the "X-Robots-Tag: noindex" line in the /* block below (makes the live site indexable).
-#   2) Add Content-Security-Policy + Strict-Transport-Security once the Supabase/Pixel/GA
-#      endpoints exist (LAUNCH_PLAYBOOK.md Phase 6). Admin keeps the stricter CSP (PROVISION.md §8).
-# To keep scalequick.cc itself permanently out of Google after launch, add a host-scoped
-# Cloudflare Transform Rule on the scalequick.cc zone instead (so production stays indexable).
+# AT LAUNCH (attaching quickscalem.com): delete the "X-Robots-Tag: noindex" line in the
+# /* block below so the live site is indexable.
+#
+# The CSP already allows the live integrations: Supabase (form endpoint), Google Fonts,
+# Cloudflare Turnstile, Meta Pixel, and GA4. If you later add a calendar embed (Cal.com),
+# add its domains to frame-src / connect-src / script-src. Verify in the browser DevTools
+# console during the final audit — CSP is easy to loosen if anything legitimate is blocked.
 
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Robots-Tag: noindex
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://www.facebook.com https://*.supabase.co; connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.facebook.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
 
-# Admin is never indexed, on any domain.
+# Admin is never indexed, on any domain (overrides the noindex value above for /admin/*).
 /admin/*
   X-Robots-Tag: noindex, nofollow
-  X-Frame-Options: DENY

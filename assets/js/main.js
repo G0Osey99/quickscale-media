@@ -169,6 +169,39 @@
     });
   }
 
+  /* ---- Cloudflare Turnstile: renders only when a public site key is configured ---- */
+  var TS_SITEKEY = CFG.turnstileSiteKey || '';
+  var tsWidgets = {};
+  function tsRenderAll() {
+    if (!TS_SITEKEY || !window.turnstile) return;
+    $$('[data-turnstile]').forEach(function (slot) {
+      if (slot.getAttribute('data-rendered')) return;
+      var f = slot.closest('form[data-leadform]');
+      if (!f) return;
+      slot.hidden = false;
+      slot.style.margin = '4px 0 16px';
+      tsWidgets[f.getAttribute('data-leadform')] = window.turnstile.render(slot, { sitekey: TS_SITEKEY });
+      slot.setAttribute('data-rendered', '1');
+    });
+  }
+  if (TS_SITEKEY) {
+    window.qsTurnstileOnload = tsRenderAll;
+    var tsScript = document.createElement('script');
+    tsScript.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=qsTurnstileOnload';
+    tsScript.async = true; tsScript.defer = true;
+    document.head.appendChild(tsScript);
+  }
+  function tsToken(key) {
+    if (!TS_SITEKEY || !window.turnstile) return null;     // not configured -> not enforced
+    var id = tsWidgets[key];
+    return id != null ? (window.turnstile.getResponse(id) || '') : '';
+  }
+  function tsReset(key) {
+    if (TS_SITEKEY && window.turnstile && tsWidgets[key] != null) {
+      try { window.turnstile.reset(tsWidgets[key]); } catch (e) {}
+    }
+  }
+
   /* ---- Lead form: validation, anti-spam, submit (live or demo) ---- */
   $$('form[data-leadform]').forEach(function (form) {
     var key = form.getAttribute('data-leadform');
@@ -217,6 +250,10 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v('email'))) { setError('email', 'Enter a valid email address'); ok = false; }
       if (!ok) { var first = form.querySelector('[aria-invalid="true"]'); if (first) first.focus(); return; }
 
+      // Cloudflare Turnstile (enforced only when a site key is configured).
+      var tToken = tsToken(key);
+      if (tToken === '') { formError('Please complete the “I’m human” check, then submit again.'); return; }
+
       var consentEl = form.querySelector('[name="smsConsent"]');
       var consentTextEl = $('.consent__text', form);
       var consented = !!(consentEl && consentEl.checked);
@@ -231,6 +268,7 @@
         pageUrl: location.href,
         attribution: ATTRIBUTION,
         submittedAt: new Date().toISOString(),
+        turnstileToken: tToken || '',
         eventId: 'lead-' + Date.now() + '-' + Math.round(Math.random() * 1e6)
       };
 
@@ -248,6 +286,7 @@
         fireLeadAnalytics(payload.eventId); showSuccess();
       }).catch(function () {
         setBusy(false);
+        tsReset(key);
         formError('Sorry — something went wrong sending your request. Please try again, or call us at the number below.');
       });
     });
@@ -259,7 +298,7 @@
           form.reset();
           $$('.input', form).forEach(function (i) { i.setAttribute('aria-invalid', 'false'); });
           $$('[data-error]', form).forEach(function (er) { er.textContent = ''; });
-          formError(''); setBusy(false);
+          formError(''); setBusy(false); tsReset(key);
           success.hidden = true; form.hidden = false;
           startedAt = Date.now();
         });
