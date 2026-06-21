@@ -9,7 +9,7 @@
 window.QS_CONFIG = {
   live: true,               // true = POST to leadEndpoint (Supabase Edge Function)
   leadEndpoint: "https://mymhjqwhhkwiqozynkul.supabase.co/functions/v1/submit-lead",
-  turnstileSiteKey: "",     // Cloudflare Turnstile PUBLIC site key — add in the anti-bot phase
+  turnstileSiteKey: "0x4AAAAAADouxnno8ldmEfEb",     // Cloudflare Turnstile PUBLIC site key — add in the anti-bot phase
   metaPixelId: "",          // Meta Pixel ID (public) — add with tracking
   ga4MeasurementId: "",     // GA4 Measurement ID, e.g. "G-XXXXXXXXXX" — add with tracking
   minFormSeconds: 3         // anti-bot timing trap: min seconds a human takes to submit
