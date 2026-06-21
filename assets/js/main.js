@@ -385,6 +385,45 @@
     }
   });
 
+  /* ---- Site-data hydration: pull admin-managed media + content from Supabase ----
+     Media fills [data-media-slot]; content overrides phone/email/social links. The static
+     HTML stays the default (SEO-safe); this only enhances when the admin has published. ---- */
+  (function hydrateSiteData() {
+    if (!(CFG.supabaseUrl && CFG.supabaseAnonKey)) return;
+    var base = String(CFG.supabaseUrl).replace(/\/+$/, '') + '/rest/v1/';
+    var headers = { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey };
+    if ($('[data-media-slot]')) {
+      fetch(base + 'media_slots?select=id,type,current,alt&current=not.is.null', { headers: headers })
+        .then(function (r) { return r.ok ? r.json() : []; }).then(applyMedia).catch(function () {});
+    }
+    fetch(base + 'site_content?select=doc&id=eq.site', { headers: headers })
+      .then(function (r) { return r.ok ? r.json() : []; }).then(function (rows) { if (rows[0] && rows[0].doc) applyContent(rows[0].doc); }).catch(function () {});
+  })();
+  function applyMedia(slots) {
+    (slots || []).forEach(function (s) {
+      if (!s.current) return;
+      var host = $('[data-media-slot="' + s.id + '"]');
+      if (!host) return;
+      var badge = host.querySelector('.media__badge');
+      while (host.firstChild) host.removeChild(host.firstChild);
+      if (badge) host.appendChild(badge);
+      var m;
+      if (s.type === 'video') { m = document.createElement('video'); m.src = s.current; m.controls = true; m.preload = 'metadata'; m.setAttribute('playsinline', ''); }
+      else { m = document.createElement('img'); m.src = s.current; m.alt = s.alt || ''; m.loading = 'lazy'; }
+      m.style.cssText = 'width:100%;height:100%;object-fit:' + (s.aspect === 'free' ? 'contain' : 'cover') + ';display:block;border:0';
+      host.classList.add('is-filled');
+      host.appendChild(m);
+    });
+  }
+  function applyContent(doc) {
+    if (!doc) return;
+    var b = doc.business || {}, soc = doc.social || {};
+    if (b.phone) $$('a[href^="tel:"]').forEach(function (a) { a.setAttribute('href', 'tel:' + String(b.phone).replace(/[^0-9+]/g, '')); if (/\d/.test(a.textContent)) a.textContent = b.phone; });
+    if (b.email) $$('a[href^="mailto:"]').forEach(function (a) { a.setAttribute('href', 'mailto:' + b.email); if (a.textContent.indexOf('@') >= 0) a.textContent = b.email; });
+    if (soc.facebook) $$('a.social[aria-label*="Facebook"]').forEach(function (a) { a.setAttribute('href', soc.facebook); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
+    if (soc.instagram) $$('a.social[aria-label*="Instagram"]').forEach(function (a) { a.setAttribute('href', soc.instagram); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
+  }
+
   /* ---- Footer year ---- */
   var yearEl = $('[data-year]');
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());

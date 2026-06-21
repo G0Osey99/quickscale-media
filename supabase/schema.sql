@@ -126,6 +126,9 @@ create policy "media: authenticated read" on public.media_slots
   for select to authenticated using (true);
 create policy "media: staff write" on public.media_slots
   for all to authenticated using (public.is_staff()) with check (public.is_staff());
+-- Public site reads PUBLISHED media (rows with an asset) so uploads render on the pages.
+create policy "media_slots public read" on public.media_slots
+  for select to anon using (current is not null);
 
 -- ---------- audit log ----------
 create table if not exists public.audit_log (

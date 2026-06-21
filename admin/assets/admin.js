@@ -259,9 +259,11 @@
       if (!LIVE) { try { return Promise.resolve(!!JSON.parse(sessionStorage.getItem('qs_admin_demo') || 'null')); } catch (e) { return Promise.resolve(false); } }
       return SB.auth.getSession().then(function (r) {
         if (!r.data.session) return false;
+        // 2FA optional: authed unless a factor is enrolled but not yet verified this session.
         return SB.auth.mfa.getAuthenticatorAssuranceLevel().then(function (a) {
-          return !!(a.data && a.data.currentLevel === 'aal2');
-        }).catch(function () { return false; });
+          var d = a.data; if (!d) return true;
+          return !(d.nextLevel === 'aal2' && d.currentLevel !== 'aal2');
+        }).catch(function () { return true; });
       });
     },
     signOut: function () {
@@ -274,10 +276,7 @@
   var loginEmail = '';
   function authShell(kids) {
     var card = el('div', { class: 'auth__card' });
-    card.appendChild(el('div', { class: 'auth__brand' }, [
-      el('span', { class: 'auth__mark', 'aria-hidden': 'true', text: 'Q' }),
-      el('span', { class: 'auth__name', html: 'QuickScale<b>&nbsp;Admin</b>' })
-    ]));
+    card.appendChild(el('div', { class: 'auth__brand' }, [el('img', { class: 'auth__logo', src: '../assets/img/banner-dark.png', alt: 'QuickScale Media' })]));
     kids.forEach(function (k) { card.appendChild(k); });
     return el('div', { class: 'auth' }, [card]);
   }
@@ -309,9 +308,11 @@
       if (!r.data.session) return loginPassword();
       // signed in but not yet aal2
       if (INVITE_SETUP) return loginSetPassword();
+      // 2FA is optional — only challenge users who have actually enrolled a factor.
       return SB.auth.mfa.listFactors().then(function (f) {
         var verified = ((f.data && f.data.totp) || []).filter(function (x) { return x.status === 'verified'; });
-        return verified.length ? loginChallenge(verified[0]) : loginEnroll();
+        if (verified.length) return loginChallenge(verified[0]);
+        return authShell([el('h1', { text: 'Almost there' }), el('p', { class: 'sub', text: 'Finishing sign-in…' }), el('button', { class: 'abtn abtn--primary abtn--block', text: 'Continue', onclick: render })]);
       });
     });
   }
@@ -366,41 +367,27 @@
     return authShell([el('h1', { text: 'Welcome' }), el('p', { class: 'sub', text: 'Set a password to finish setting up your account.' }), form]);
   }
 
-  function loginEnroll() {
-    var box = authShell([el('h1', { text: 'Set up two-factor' }), el('p', { class: 'sub', text: 'Scan the QR with an authenticator app (Google Authenticator, 1Password, Authy), then enter the 6-digit code.' })]);
-    var card = box.querySelector('.auth__card');
+  // Reusable TOTP enrollment UI (rendered into a container) — 2FA is optional, set up from Settings.
+  function buildEnrollUI(container, onDone) {
     var status = el('p', { class: 'sub', text: 'Generating code…' });
-    card.appendChild(status);
-    // clean up any half-finished factor, then enroll fresh
+    container.appendChild(status);
     SB.auth.mfa.listFactors().then(function (f) {
       var unverified = ((f.data && f.data.totp) || []).filter(function (x) { return x.status !== 'verified'; });
       return Promise.all(unverified.map(function (x) { return SB.auth.mfa.unenroll({ factorId: x.id }); }));
     }).then(function () {
       return SB.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Admin TOTP ' + Date.now() });
     }).then(function (r) {
-      clear(card);
-      card.appendChild(el('div', { class: 'auth__brand' }, [el('span', { class: 'auth__mark', 'aria-hidden': 'true', text: 'Q' }), el('span', { class: 'auth__name', html: 'QuickScale<b>&nbsp;Admin</b>' })]));
-      if (r.error) { card.appendChild(el('div', { class: 'error', text: r.error.message })); card.appendChild(el('button', { class: 'abtn abtn--ghost abtn--block', text: 'Sign out', onclick: Auth.signOut })); return; }
+      clear(container);
+      if (r.error) { container.appendChild(el('div', { class: 'error', text: r.error.message })); return; }
       var d = r.data;
-      card.appendChild(el('h1', { text: 'Set up two-factor' }));
-      card.appendChild(el('div', { style: 'display:flex;justify-content:center;margin:8px 0 6px' }, [el('img', { src: d.totp.qr_code, alt: 'TOTP QR code', width: '180', height: '180', style: 'border-radius:10px;background:#fff;padding:8px' })]));
-      card.appendChild(el('p', { class: 'auth__hint', style: 'text-align:center', text: 'Or enter this key manually: ' + d.totp.secret }));
+      container.appendChild(el('p', { class: 'hint', text: 'Scan with an authenticator app (Google Authenticator, 1Password, Authy), then enter the 6-digit code.' }));
+      container.appendChild(el('div', { style: 'display:flex;justify-content:center;margin:6px 0' }, [el('img', { src: d.totp.qr_code, alt: 'TOTP QR code', width: '170', height: '170', style: 'border-radius:10px;background:#fff;padding:8px;border:1px solid var(--border)' })]));
+      container.appendChild(el('p', { class: 'hint', style: 'text-align:center;word-break:break-all', text: 'Manual key: ' + d.totp.secret }));
       var err = el('div', { class: 'error' });
       var otp = otpField(function (code) { submit(code); });
-      function submit(code) {
-        err.textContent = '';
-        SB.auth.mfa.challengeAndVerify({ factorId: d.id, code: code }).then(function (v) {
-          if (v.error) { err.textContent = v.error.message; otp.reset(); return; }
-          render();
-        });
-      }
-      card.appendChild(el('form', { onsubmit: function (e) { e.preventDefault(); submit(otp.code()); } }, [
-        el('div', { class: 'field' }, [el('label', { text: 'Authenticator code' }), otp.node, err]),
-        el('button', { class: 'abtn abtn--primary abtn--block', type: 'submit', text: 'Verify & finish' })
-      ]));
-      card.appendChild(el('p', { class: 'auth__hint' }, [el('button', { class: 'auth__link', type: 'button', text: 'Sign out', onclick: Auth.signOut })]));
+      function submit(code) { err.textContent = ''; SB.auth.mfa.challengeAndVerify({ factorId: d.id, code: code }).then(function (v) { if (v.error) { err.textContent = v.error.message; otp.reset(); return; } onDone(); }); }
+      container.appendChild(el('form', { onsubmit: function (e) { e.preventDefault(); submit(otp.code()); } }, [el('div', { class: 'field' }, [el('label', { text: 'Authenticator code' }), otp.node, err]), el('button', { class: 'abtn abtn--primary abtn--sm', type: 'submit', text: 'Verify & turn on' })]));
     });
-    return box;
   }
 
   function loginChallenge(factor) {
@@ -446,7 +433,7 @@
     var unread = state.leads.filter(function (l) { return l.status === 'new' && !l.spam; }).length;
     var layout = el('div', { class: 'layout' });
     var side = el('aside', { class: 'sidebar' });
-    side.appendChild(el('div', { class: 'sidebar__brand' }, [el('span', { class: 'sidebar__mark', 'aria-hidden': 'true', text: 'Q' }), el('span', { class: 'sidebar__name', text: 'QuickScale' })]));
+    side.appendChild(el('div', { class: 'sidebar__brand' }, [el('img', { class: 'sidebar__logo', src: '../assets/img/banner-light.png', alt: 'QuickScale Media' })]));
     var nav = el('nav', { 'aria-label': 'Admin' });
     NAV.forEach(function (item) {
       var kids = [el('span', { 'aria-hidden': 'true', class: 'navicon', html: item.icon }), el('span', { text: item.label })];
@@ -772,14 +759,34 @@
       kvRead('Supabase URL', CFG.supabaseUrl || '—'), kvRead('Meta Pixel ID', CFG.metaPixelId || '— (not set)'), kvRead('GA4 Measurement ID', CFG.ga4MeasurementId || '— (not set)'), kvRead('Turnstile site key', CFG.turnstileSiteKey || '— (not set)')
     ])]));
 
-    // Security
-    c.appendChild(el('div', { class: 'panel mb-16' }, [el('div', { class: 'panel__head' }, [el('h2', { text: 'Security' })]), el('div', { class: 'panel__body' }, [
-      el('div', { class: 'row mb-16' }, [
-        el('button', { class: 'abtn abtn--ghost abtn--sm', type: 'button', text: 'Re-enroll 2FA', onclick: function () { if (!LIVE) { toast('Live only.'); return; } SB.auth.mfa.listFactors().then(function (f) { return Promise.all(((f.data && f.data.totp) || []).map(function (x) { return SB.auth.mfa.unenroll({ factorId: x.id }); })); }).then(function () { return SB.auth.signOut(); }).then(function () { toast('2FA reset — sign in again to set it up.'); render(); }); } }),
-        el('button', { class: 'abtn abtn--danger abtn--sm', type: 'button', text: 'Sign out all devices', onclick: function () { if (!LIVE) { toast('Live only.'); return; } SB.auth.signOut({ scope: 'global' }).then(function () { toast('Signed out everywhere.'); render(); }); } })
-      ]),
-      el('div', { class: 'hint', text: 'Auth, password hashing, MFA, and session revocation are handled by Supabase. Access is enforced by Row-Level Security on every table.' })
-    ])]));
+    // Security — optional two-factor (opt-in add-on) + session controls
+    var sec = el('div', { class: 'panel mb-16' }, [el('div', { class: 'panel__head' }, [el('h2', { text: 'Security' })])]);
+    var secBody = el('div', { class: 'panel__body' }); sec.appendChild(secBody); c.appendChild(sec);
+    function paintMfa() {
+      clear(secBody);
+      var twofa = el('div', { class: 'mb-16' }); secBody.appendChild(twofa);
+      secBody.appendChild(el('div', { class: 'row mb-16' }, [el('button', { class: 'abtn abtn--danger abtn--sm', type: 'button', text: 'Sign out all devices', onclick: function () { if (!LIVE) { toast('Live only.'); return; } SB.auth.signOut({ scope: 'global' }).then(function () { toast('Signed out everywhere.'); render(); }); } })]));
+      secBody.appendChild(el('div', { class: 'hint', text: 'Two-factor authentication is an optional add-on (recommended). Auth, password hashing, and session revocation are handled by Supabase; access is enforced by Row-Level Security.' }));
+      twofa.appendChild(el('div', { class: 'section-title', text: 'Two-factor authentication' }));
+      if (!LIVE) { twofa.appendChild(el('div', { class: 'muted', text: 'Available when connected to Supabase.' })); return; }
+      var slot = el('div', { class: 'muted', text: 'Checking…' }); twofa.appendChild(slot);
+      SB.auth.mfa.listFactors().then(function (f) {
+        var verified = ((f.data && f.data.totp) || []).filter(function (x) { return x.status === 'verified'; });
+        clear(slot);
+        if (verified.length) {
+          slot.appendChild(el('div', { class: 'row', style: 'align-items:center;gap:10px;flex-wrap:wrap' }, [
+            el('span', { class: 'badge badge--won', text: 'On' }), el('span', { text: 'Two-factor is enabled on this account.' }),
+            el('button', { class: 'abtn abtn--ghost abtn--sm', type: 'button', text: 'Turn off', onclick: function () { Promise.all(verified.map(function (x) { return SB.auth.mfa.unenroll({ factorId: x.id }); })).then(function () { toast('Two-factor turned off.'); paintMfa(); }).catch(function (e) { toast(errMsg(e)); }); } })
+          ]));
+        } else {
+          var enrollHolder = el('div', { style: 'margin-top:10px' });
+          var enableBtn = el('button', { class: 'abtn abtn--primary abtn--sm', type: 'button', text: 'Enable two-factor', onclick: function () { enableBtn.disabled = true; buildEnrollUI(enrollHolder, function () { toast('Two-factor enabled.'); paintMfa(); }); } });
+          slot.appendChild(el('div', { class: 'row', style: 'align-items:center;gap:10px;flex-wrap:wrap' }, [el('span', { class: 'badge badge--lost', text: 'Off' }), el('span', { text: 'Add an authenticator app for extra security.' }), enableBtn]));
+          slot.appendChild(enrollHolder);
+        }
+      }).catch(function (e) { clear(slot); slot.appendChild(el('div', { class: 'error', text: errMsg(e) })); });
+    }
+    paintMfa();
 
     // Audit log
     var wrap = el('div', { class: 'tablewrap' }); var table = el('table', { class: 'table' });
