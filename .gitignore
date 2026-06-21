@@ -11,3 +11,9 @@ admin/_shot.html
 .DS_Store
 Thumbs.db
 *.log
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
