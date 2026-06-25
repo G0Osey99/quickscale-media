@@ -1,37 +1,37 @@
 // ============================================================
 // QuickScale Media — submit-lead Edge Function (Deno).
-// Public lead forms POST here. This is the ONLY public write path
-// to the database; it uses the service_role key (server-side only)
-// to insert into the RLS-protected `leads` table.
+//
+// The public lead form POSTs here. This is a thin, hardened RELAY that
+// forwards leads into GoHighLevel (the CRM / SMS / automation system) via a
+// GHL Inbound Webhook. It verifies anti-spam (Turnstile + honeypot), validates
+// and normalizes the fields, then forwards. It does NOT run a CRM of its own.
 //
 // Deploy:  supabase functions deploy submit-lead --no-verify-jwt
 // Secrets (supabase secrets set ...):
-//   ALLOWED_ORIGIN      e.g. https://quickscalem.com  (or the github.io URL)
-//   TURNSTILE_SECRET    Cloudflare Turnstile secret  (optional; if set, token required)
-//   RESEND_API_KEY      transactional email key      (optional)
-//   NOTIFY_EMAIL        where new-lead alerts go      (optional)
-//   FROM_EMAIL          verified sender, e.g. leads@quickscalem.com (optional)
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
+//   GHL_WEBHOOK_URL     GoHighLevel Inbound Webhook URL — the primary lead sink.
+//   ALLOWED_ORIGINS     comma-separated site origins (CORS).
+//   TURNSTILE_SECRET    Cloudflare Turnstile secret (optional; if set, token required).
+//   RESEND_API_KEY / NOTIFY_EMAIL / FROM_EMAIL   backup email notification (optional).
+//   META_PIXEL_ID / META_CAPI_TOKEN              Meta CAPI "Lead" (optional).
+// If GHL_WEBHOOK_URL is NOT set yet, the function falls back to storing the lead
+// in Supabase (`leads`) so nothing is lost while GHL is being wired up.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Allowlist of site origins (staging + production). Override with the ALLOWED_ORIGINS
-// secret (comma-separated) if needed; the defaults already cover both domains.
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ||
   "https://quickscalem.com,https://www.quickscalem.com,https://scalequick.cc,https://www.scalequick.cc,https://quickscale-media.minedude.workers.dev,http://localhost:8080")
   .split(",").map((s) => s.trim()).filter(Boolean);
+const GHL_WEBHOOK_URL = Deno.env.get("GHL_WEBHOOK_URL") ?? "";
 const TURNSTILE_SECRET = Deno.env.get("TURNSTILE_SECRET") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const NOTIFY_EMAIL = Deno.env.get("NOTIFY_EMAIL") ?? "";
 const FROM_EMAIL = Deno.env.get("FROM_EMAIL") ?? "leads@quickscalem.com";
-// Meta Conversions API (server-side "Lead", deduped with the browser Pixel via event_id).
-// Only fires when BOTH the Pixel ID and a CAPI access token are set as secrets.
 const META_PIXEL_ID = Deno.env.get("META_PIXEL_ID") ?? "";
 const META_CAPI_TOKEN = Deno.env.get("META_CAPI_TOKEN") ?? "";
 const META_TEST_EVENT_CODE = Deno.env.get("META_TEST_EVENT_CODE") ?? "";
 const META_API_VERSION = "v19.0";
 
-// CORS reflects the request Origin when it's in the allowlist (so staging + prod both work).
 function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
@@ -44,8 +44,6 @@ function corsHeaders(origin: string | null) {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Trim, cap length, and drop ASCII control characters (codepoints < 32 and 127)
-// while keeping normal punctuation like spaces, hyphens and parentheses.
 function clean(s: unknown, max = 200): string {
   let out = "";
   for (const ch of String(s ?? "")) {
@@ -54,15 +52,31 @@ function clean(s: unknown, max = 200): string {
   }
   return out.trim().slice(0, max);
 }
-
 async function sha256(s: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-
 function clientIp(req: Request): string {
   const h = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for") ?? "0.0.0.0";
   return h.split(",")[0].trim();
+}
+function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/);
+  return { first: parts[0] || full, last: parts.slice(1).join(" ") };
+}
+function e164(phoneRaw: string): string {
+  const d = phoneRaw.replace(/\D/g, "");
+  if (d.length === 10) return "+1" + d;
+  if (d.length === 11 && d[0] === "1") return "+" + d;
+  return d ? "+" + d : "";
+}
+async function postJson(target: string, payload: unknown, ms = 8000): Promise<boolean> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(target, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    return r.ok;
+  } catch { return false; } finally { clearTimeout(timer); }
 }
 
 Deno.serve(async (req) => {
@@ -72,17 +86,16 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  // Reject browser callers from non-allowlisted origins (a missing Origin = non-browser, allowed).
   const reqOrigin = req.headers.get("Origin");
   if (reqOrigin && !ALLOWED_ORIGINS.includes(reqOrigin)) return json({ error: "forbidden_origin" }, 403);
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
 
-  // Honeypot (if the client forwards it) — pretend success.
+  // Honeypot — pretend success.
   if (clean(body.company_website)) return json({ ok: true });
 
-  // Cloudflare Turnstile (only enforced if a secret is configured).
+  // Cloudflare Turnstile (enforced only if a secret is configured).
   if (TURNSTILE_SECRET) {
     const token = clean(body.turnstileToken, 4000);
     if (!token) return json({ error: "captcha_required" }, 400);
@@ -95,137 +108,100 @@ Deno.serve(async (req) => {
     if (!v.success) return json({ error: "captcha_failed" }, 400);
   }
 
-  // Validate + normalize (server is the source of truth).
+  // Validate + normalize.
   const fullName = clean(body.fullName, 120);
   const business = clean(body.business, 160);
   const phoneRaw = clean(body.phone, 40);
   const email = clean(body.email, 200).toLowerCase();
-  const phoneDigits = (phoneRaw.match(/\d/g) || []).length;
-  if (!fullName || !business || phoneDigits < 10 || !EMAIL_RE.test(email)) {
+  if (!fullName || !business || (phoneRaw.match(/\d/g) || []).length < 10 || !EMAIL_RE.test(email)) {
     return json({ error: "validation_failed" }, 422);
   }
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const db = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  // Per-IP rate limit (sha-256 of IP, last 60s, max 5). Best-effort (non-atomic);
-  // Turnstile is the primary bot defense — a race could let 1-2 extra requests through.
   const rawIp = clientIp(req);
-  const ipHash = await sha256(rawIp);
-  const since = new Date(Date.now() - 60_000).toISOString();
-  const { count } = await db.from("leads").select("id", { count: "exact", head: true })
-    .eq("ip_hash", ipHash).gte("created_at", since);
-  if ((count ?? 0) >= 5) return json({ error: "rate_limited" }, 429);
-
+  const userAgent = clean(req.headers.get("user-agent"), 400);
   const smsConsent = body.smsConsent === true;
-  const record = {
-    full_name: fullName,
-    business,
-    phone: phoneRaw,
-    email,
-    sms_consent: smsConsent,
-    consent_text: smsConsent ? clean(body.consentText, 600) : null,
-    consent_ip: smsConsent ? rawIp : null, // TCPA proof only when consented
-    source_page: clean(body.sourcePage, 40),
-    page_url: clean(body.pageUrl, 500),
-    attribution: (body.attribution && typeof body.attribution === "object" && JSON.stringify(body.attribution).length <= 2000) ? body.attribution : {},
-    event_id: clean(body.eventId, 80),
-    ip_hash: ipHash,
-    user_agent: clean(req.headers.get("user-agent"), 400),
-  };
+  const consentText = smsConsent ? clean(body.consentText, 600) : "";
+  const eventId = clean(body.eventId, 80);
+  const sourcePage = clean(body.sourcePage, 40);
+  const pageUrl = clean(body.pageUrl, 500);
+  const attribution = (body.attribution && typeof body.attribution === "object" && JSON.stringify(body.attribution).length <= 2000)
+    ? body.attribution as Record<string, unknown> : {};
+  const { first, last } = splitName(fullName);
 
-  // PERSIST FIRST — a lead is never lost to a downstream (email) failure.
-  const { data, error } = await db.from("leads").insert(record).select("id").single();
-  if (error) { console.error("insert_failed", error); return json({ error: "server_error" }, 500); }
-
-  // THEN notify (best-effort + concurrent; a downstream failure never fails the request).
+  // Backup notifications (best-effort) — run regardless of which sink is used.
   const notify: Promise<unknown>[] = [];
-
-  // (a) New-lead email alert via Resend.
   if (RESEND_API_KEY && NOTIFY_EMAIL) {
     notify.push((async () => {
-      const attr = record.attribution as Record<string, unknown>;
-      const campaign = (attr && attr.utm_campaign) ? String(attr.utm_campaign) : "-";
-      const lines = [
-        "New strategy-call request",
-        "",
-        "Name: " + fullName,
-        "Business: " + business,
-        "Phone: " + phoneRaw,
-        "Email: " + email,
-        "SMS consent: " + (smsConsent ? "yes" : "no"),
-        "Source: " + record.source_page,
-        "Campaign: " + campaign,
-      ];
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 5000);
+      const campaign = attribution.utm_campaign ? String(attribution.utm_campaign) : "-";
+      const lines = ["New strategy-call request", "", "Name: " + fullName, "Business: " + business,
+        "Phone: " + phoneRaw, "Email: " + email, "SMS consent: " + (smsConsent ? "yes" : "no"),
+        "Source: " + sourcePage, "Campaign: " + campaign];
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 5000);
       try {
         await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          signal: ctl.signal,
+          method: "POST", signal: ctl.signal,
           headers: { "Authorization": "Bearer " + RESEND_API_KEY, "content-type": "application/json" },
-          body: JSON.stringify({
-            from: FROM_EMAIL,
-            to: NOTIFY_EMAIL,
-            subject: "New lead: " + fullName + " - " + business,
-            text: lines.join("\n"),
-          }),
+          body: JSON.stringify({ from: FROM_EMAIL, to: NOTIFY_EMAIL, subject: "New lead: " + fullName + " - " + business, text: lines.join("\n") }),
         });
       } finally { clearTimeout(timer); }
     })());
   }
-
-  // (b) Meta Conversions API — server-side "Lead" reusing the Pixel's event_id so Meta
-  // dedupes the browser + server events. PII (email/phone) is SHA-256 hashed per spec.
-  if (META_PIXEL_ID && META_CAPI_TOKEN && record.event_id) {
+  if (META_PIXEL_ID && META_CAPI_TOKEN && eventId) {
     notify.push((async () => {
       const digits = phoneRaw.replace(/\D/g, "");
-      const phoneNorm = digits.length === 10 ? "1" + digits : digits; // assume US for 10-digit
-      const attr = record.attribution as Record<string, unknown>;
-      const fbclid = attr && typeof attr.fbclid === "string" ? attr.fbclid : "";
-      const landedMs = attr && typeof attr.landingAt === "string" ? Date.parse(attr.landingAt) : NaN;
-      const fbcTime = Number.isFinite(landedMs) ? landedMs : Date.now(); // observed click time if known
+      const phoneNorm = digits.length === 10 ? "1" + digits : digits;
+      const fbclid = typeof attribution.fbclid === "string" ? attribution.fbclid : "";
+      const landedMs = typeof attribution.landingAt === "string" ? Date.parse(attribution.landingAt) : NaN;
+      const fbcTime = Number.isFinite(landedMs) ? landedMs : Date.now();
       const fbp = clean(body.fbp, 100);
-      const userData: Record<string, unknown> = {
-        em: [await sha256(email)],
-        ph: [await sha256(phoneNorm)],
-        client_ip_address: rawIp,
-        client_user_agent: record.user_agent,
-      };
+      const userData: Record<string, unknown> = { em: [await sha256(email)], ph: [await sha256(phoneNorm)], client_ip_address: rawIp, client_user_agent: userAgent };
       if (fbclid) userData.fbc = "fb.1." + fbcTime + "." + fbclid;
       if (fbp) userData.fbp = fbp;
-      const payload: Record<string, unknown> = {
-        data: [{
-          event_name: "Lead",
-          event_time: Math.floor(Date.now() / 1000),
-          event_id: record.event_id,
-          action_source: "website",
-          event_source_url: record.page_url || undefined,
-          user_data: userData,
-        }],
-      };
+      const payload: Record<string, unknown> = { data: [{ event_name: "Lead", event_time: Math.floor(Date.now() / 1000), event_id: eventId, action_source: "website", event_source_url: pageUrl || undefined, user_data: userData }] };
       if (META_TEST_EVENT_CODE) payload.test_event_code = META_TEST_EVENT_CODE;
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 5000);
-      try {
-        await fetch(
-          "https://graph.facebook.com/" + META_API_VERSION + "/" + META_PIXEL_ID +
-            "/events?access_token=" + encodeURIComponent(META_CAPI_TOKEN),
-          {
-            method: "POST",
-            signal: ctl.signal,
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          },
-        );
-      } finally { clearTimeout(timer); }
+      await postJson("https://graph.facebook.com/" + META_API_VERSION + "/" + META_PIXEL_ID + "/events?access_token=" + encodeURIComponent(META_CAPI_TOKEN), payload, 5000);
     })());
   }
 
-  if (notify.length) {
-    try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); }
+  // ---------- PRIMARY SINK: GoHighLevel inbound webhook ----------
+  if (GHL_WEBHOOK_URL) {
+    const ghlPayload = {
+      firstName: first, lastName: last, name: fullName,
+      email, phone: e164(phoneRaw) || phoneRaw, companyName: business,
+      source: "Website" + (sourcePage ? " (" + sourcePage + ")" : ""),
+      smsConsent, consentText, consentIp: smsConsent ? rawIp : "",
+      pageUrl, eventId,
+      utmSource: clean(attribution.utm_source, 120), utmMedium: clean(attribution.utm_medium, 120),
+      utmCampaign: clean(attribution.utm_campaign, 200), utmContent: clean(attribution.utm_content, 200),
+      utmTerm: clean(attribution.utm_term, 200), fbclid: clean(attribution.fbclid, 200),
+      gclid: clean(attribution.gclid, 200), referrer: clean(attribution.referrer, 300),
+      tags: ["website-lead"],
+    };
+    const ok = await postJson(GHL_WEBHOOK_URL, ghlPayload);
+    if (!ok) {
+      // Dead-letter: never lose a lead. Store in Supabase if available (email is already queued).
+      try {
+        const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+        await db.from("leads").insert({ full_name: fullName, business, phone: phoneRaw, email, sms_consent: smsConsent, consent_text: consentText || null, consent_ip: smsConsent ? rawIp : null, source_page: sourcePage, page_url: pageUrl, attribution, event_id: eventId, ip_hash: await sha256(rawIp), user_agent: userAgent });
+      } catch (e) { console.error("ghl_failed_and_store_failed", e); }
+    }
+    if (notify.length) { try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); } }
+    return json({ ok: true });
   }
 
-  return json({ ok: true, id: data?.id });
+  // ---------- FALLBACK (GHL not configured yet): store in Supabase ----------
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const ipHash = await sha256(rawIp);
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const { count } = await db.from("leads").select("id", { count: "exact", head: true }).eq("ip_hash", ipHash).gte("created_at", since);
+  if ((count ?? 0) >= 5) return json({ error: "rate_limited" }, 429);
+
+  const { error } = await db.from("leads").insert({
+    full_name: fullName, business, phone: phoneRaw, email, sms_consent: smsConsent,
+    consent_text: consentText || null, consent_ip: smsConsent ? rawIp : null,
+    source_page: sourcePage, page_url: pageUrl, attribution, event_id: eventId, ip_hash: ipHash, user_agent: userAgent,
+  }).select("id").single();
+  if (error) { console.error("insert_failed", error); return json({ error: "server_error" }, 500); }
+  if (notify.length) { try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); } }
+  return json({ ok: true });
 });

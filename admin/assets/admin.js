@@ -103,16 +103,6 @@
   /* ============================================================
      DATA LAYER — branches on LIVE (Supabase) vs mock.
      ============================================================ */
-  function mapLead(r) {
-    var attr = r.attribution || {};
-    return {
-      id: r.id, display: 'L-' + String(r.id).slice(0, 6),
-      name: r.full_name, business: r.business, phone: r.phone, email: r.email,
-      smsConsent: !!r.sms_consent, sourcePage: r.source_page || '—',
-      campaign: attr.utm_campaign || attr.utm_source || '—',
-      status: r.status, spam: !!r.spam, createdAt: r.created_at
-    };
-  }
   function contentDefaults() { return copy(M.content || {}); }
   var _profMap = null;
   var DB = {
@@ -134,33 +124,6 @@
         (r.data || []).forEach(function (p) { _profMap[p.id] = p.full_name; });
         return _profMap;
       });
-    },
-    leads: function () {
-      if (!LIVE) return Promise.resolve(M.leads.slice());
-      return SB.from('leads').select('*').order('created_at', { ascending: false }).then(function (r) {
-        if (r.error) throw r.error; return (r.data || []).map(mapLead);
-      });
-    },
-    updateLead: function (id, fields) {
-      if (!LIVE) { var l = find(M.leads, id); if (l) Object.assign(l, fields); return Promise.resolve(); }
-      return SB.from('leads').update(fields).eq('id', id).then(function (r) { if (r.error) throw r.error; });
-    },
-    notes: function (leadId) {
-      if (!LIVE) { var l = find(M.leads, leadId); return Promise.resolve((l && l.notes) || []); }
-      return Promise.all([
-        SB.from('lead_notes').select('*').eq('lead_id', leadId).order('created_at', { ascending: true }),
-        DB.profilesMap()
-      ]).then(function (res) {
-        if (res[0].error) throw res[0].error;
-        var pm = res[1];
-        return (res[0].data || []).map(function (n) { return { at: n.created_at, by: (pm[n.author] || 'Staff').split(' ')[0], text: n.body }; });
-      });
-    },
-    addNote: function (leadId, text) {
-      if (!LIVE) { var l = find(M.leads, leadId); if (l) l.notes.push({ at: new Date().toISOString(), by: M.currentUser.name.split(' ')[0], text: text }); return Promise.resolve(); }
-      return SB.auth.getUser().then(function (r) {
-        return SB.from('lead_notes').insert({ lead_id: leadId, author: r.data.user.id, body: text });
-      }).then(function (r) { if (r.error) throw r.error; return DB.writeAudit('Added note to lead ' + String(leadId).slice(0, 6)); });
     },
     mediaSlots: function () {
       if (!LIVE) return Promise.resolve(M.mediaSlots.slice());
@@ -223,33 +186,11 @@
     writeAudit: function (action) {
       if (!LIVE) { M.auditLog.unshift({ at: new Date().toISOString(), actor: M.currentUser.name.split(' ')[0], action: action, ip: '—' }); return Promise.resolve(); }
       return SB.auth.getUser().then(function (r) { return SB.from('audit_log').insert({ actor: r.data.user.id, action: action }); }).then(function () {}).catch(function () {});
-    },
-    kpis: function (leads) {
-      var now = Date.now(), DAY = 86400000, real = leads.filter(function (l) { return !l.spam; });
-      function within(days) { return real.filter(function (l) { return (now - new Date(l.createdAt).getTime()) <= days * DAY; }); }
-      var d0 = new Date(); d0.setHours(0, 0, 0, 0);
-      var l30 = within(30), l7 = within(7);
-      var today = real.filter(function (l) { return new Date(l.createdAt).getTime() >= d0.getTime(); });
-      function ct(arr, st) { return arr.filter(function (l) { return l.status === st; }).length; }
-      var src = { Facebook: 0, Instagram: 0, 'Direct / other': 0 };
-      l30.forEach(function (l) { var c = (l.campaign || '') + ' ' + (l.sourcePage || ''); if (/facebook|fb|\bmeta\b/i.test(c)) src.Facebook++; else if (/insta|\big\b/i.test(c)) src.Instagram++; else src['Direct / other']++; });
-      return {
-        leadsToday: today.length, leads7d: l7.length, leads30d: l30.length,
-        booked30d: ct(l30, 'booked'), won30d: ct(l30, 'won'), costPerLead: '—',
-        bySource: Object.keys(src).map(function (k) { return { label: k, value: src[k] }; }),
-        funnel: [
-          { label: 'Submitted', value: l30.length },
-          { label: 'Contacted', value: l30.filter(function (l) { return ['contacted', 'booked', 'won'].indexOf(l.status) >= 0; }).length },
-          { label: 'Booked', value: l30.filter(function (l) { return ['booked', 'won'].indexOf(l.status) >= 0; }).length },
-          { label: 'Won', value: ct(l30, 'won') }
-        ]
-      };
     }
   };
   function find(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i]; return null; }
 
-  var STATUSES = ['new', 'contacted', 'booked', 'won', 'lost'];
-  var state = { me: null, leads: [] };
+  var state = { me: null };
 
   /* ============================================================
      AUTH
@@ -347,7 +288,7 @@
       el('div', { class: 'field' }, [el('label', { text: 'Password' }), pw, err]),
       btn
     ]);
-    return authShell([el('h1', { text: 'Sign in' }), el('p', { class: 'sub', text: 'Manage leads, media, and content.' }), form]);
+    return authShell([el('h1', { text: 'Sign in' }), el('p', { class: 'sub', text: 'Manage media, content, and team access.' }), form]);
   }
 
   function loginSetPassword() {
@@ -418,26 +359,23 @@
      ============================================================ */
   var NAV = [
     { id: 'dashboard', label: 'Dashboard', icon: ICONS.grid },
-    { id: 'inbox', label: 'Inbox', icon: ICONS.inbox },
     { id: 'media', label: 'Media', icon: ICONS.image },
     { id: 'content', label: 'Content', icon: ICONS.edit },
     { id: 'users', label: 'Users', icon: ICONS.users },
     { id: 'settings', label: 'Settings', icon: ICONS.gear }
   ];
-  var TITLES = { dashboard: ['Dashboard', 'Your funnel at a glance'], inbox: ['Inbox', 'Incoming strategy-call requests'], media: ['Media', 'Replace placeholders with real job-site media'], content: ['Content', 'Edit the public site copy'], users: ['Users', 'Team access & invitations'], settings: ['Settings', 'Notifications, integrations & security'] };
+  var TITLES = { dashboard: ['Dashboard', 'Website management — leads live in GoHighLevel'], media: ['Media', 'Replace placeholders with real job-site media'], content: ['Content', 'Edit the public site copy'], users: ['Users', 'Team access & invitations'], settings: ['Settings', 'Notifications, integrations & security'] };
   function route() { return (location.hash || '').replace(/^#\/?/, '') || 'dashboard'; }
   var VIEWS = {};
 
   function renderShell(r) {
     var me = state.me || { name: '—', role: '' };
-    var unread = state.leads.filter(function (l) { return l.status === 'new' && !l.spam; }).length;
     var layout = el('div', { class: 'layout' });
     var side = el('aside', { class: 'sidebar' });
     side.appendChild(el('div', { class: 'sidebar__brand' }, [el('img', { class: 'sidebar__logo', src: '../assets/img/banner-light.png', alt: 'QuickScale Media' })]));
     var nav = el('nav', { 'aria-label': 'Admin' });
     NAV.forEach(function (item) {
       var kids = [el('span', { 'aria-hidden': 'true', class: 'navicon', html: item.icon }), el('span', { text: item.label })];
-      if (item.id === 'inbox' && unread) kids.push(el('span', { class: 'badge-dot', text: String(unread) }));
       var a = el('a', { class: 'navitem', href: '#/' + item.id }, kids);
       if (r === item.id) a.setAttribute('aria-current', 'page');
       nav.appendChild(a);
@@ -463,144 +401,29 @@
     return layout;
   }
   function loadingPanel(msg) { return el('div', { class: 'panel' }, [el('div', { class: 'panel__body muted', text: msg || 'Loading…' })]); }
-  function badge(status) { return el('span', { class: 'badge badge--' + status, text: status }); }
   function optEl(v, label) { return el('option', { value: v, text: label }); }
   function th(t) { return el('th', { text: t }); }
   function panel(title, bodyNode) { return el('div', { class: 'panel mb-16' }, [el('div', { class: 'panel__head' }, [el('h2', { text: title })]), el('div', { class: 'panel__body' }, [bodyNode])]); }
 
   /* ============================================================
-     DASHBOARD  (uses state.leads, already loaded)
+     DASHBOARD
      ============================================================ */
+  var GHL_URL = (CFG.ghlAppUrl || 'https://app.gohighlevel.com/');
   VIEWS.dashboard = function (c) {
-    var k = DB.kpis(state.leads);
-    var kp = el('div', { class: 'kpis' });
-    [['leadsToday', 'leads today'], ['leads7d', 'leads · 7 days'], ['leads30d', 'leads · 30 days'], ['booked30d', 'booked · 30 days'], ['costPerLead', 'cost / lead'], ['won30d', 'won · 30 days']].forEach(function (p, i) {
-      kp.appendChild(el('div', { class: 'kpi' + (i === 0 ? ' kpi--accent' : '') }, [el('div', { class: 'kpi__num', text: String(k[p[0]]) }), el('div', { class: 'kpi__label', text: p[1] })]));
-    });
-    c.appendChild(kp);
-    var cols = el('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(280px,1fr));' });
-    cols.appendChild(panel('Leads by source (30 days)', barList(k.bySource)));
-    cols.appendChild(panel('Funnel (30 days)', barList(k.funnel)));
-    c.appendChild(cols);
-    var p = panel('Recent leads', leadTable(state.leads.slice(0, 6)));
-    p.querySelector('.panel__head').appendChild(el('a', { class: 'abtn abtn--ghost abtn--sm', href: '#/inbox', text: 'Open inbox →' }));
-    c.appendChild(p);
-  };
-  function barList(items) {
-    var max = items.reduce(function (m, x) { return Math.max(m, x.value); }, 1);
-    var box = el('div', { class: 'bars' });
-    items.forEach(function (x) { box.appendChild(el('div', { class: 'bar' }, [el('span', { class: 'muted', text: x.label }), el('span', { class: 'bar__track' }, [el('span', { class: 'bar__fill', style: 'width:' + Math.round(x.value / max * 100) + '%' })]), el('span', { class: 'bar__val', text: String(x.value) })])); });
-    return box;
-  }
-
-  /* ============================================================
-     INBOX
-     ============================================================ */
-  var inboxFilter = { q: '', status: '', spam: false };
-  VIEWS.inbox = function (c) {
-    var bar = el('div', { class: 'toolbar' });
-    var q = el('input', { type: 'search', placeholder: 'Search name, business, email…', value: inboxFilter.q });
-    q.addEventListener('input', function () { inboxFilter.q = q.value; refresh(); });
-    var st = el('select', {}, [optEl('', 'All statuses')].concat(STATUSES.map(function (s) { return optEl(s, cap(s)); })));
-    st.value = inboxFilter.status; st.addEventListener('change', function () { inboxFilter.status = st.value; refresh(); });
-    var sp = el('label', { class: 'row', style: 'font-size:13px;gap:6px;cursor:pointer' }, [(function () { var cb = el('input', { type: 'checkbox' }); cb.checked = inboxFilter.spam; cb.addEventListener('change', function () { inboxFilter.spam = cb.checked; refresh(); }); return cb; })(), el('span', { text: 'Show spam' })]);
-    bar.appendChild(q); bar.appendChild(st); bar.appendChild(sp); bar.appendChild(el('span', { class: 'spacer' }));
-    bar.appendChild(el('button', { class: 'abtn abtn--ghost abtn--sm', type: 'button', text: 'Export CSV', onclick: exportCsv }));
-    c.appendChild(bar);
-    var holder = el('div', { class: 'panel' }); c.appendChild(holder);
-    function refresh() {
-      clear(holder);
-      var rows = state.leads.filter(function (l) {
-        if (inboxFilter.spam !== !!l.spam) return false;
-        if (inboxFilter.status && l.status !== inboxFilter.status) return false;
-        var q2 = inboxFilter.q.toLowerCase().trim();
-        if (q2 && ((l.name + ' ' + l.business + ' ' + l.email + ' ' + l.phone).toLowerCase().indexOf(q2) === -1)) return false;
-        return true;
-      });
-      if (!rows.length) { holder.appendChild(el('div', { class: 'panel__body muted', text: 'No leads match.' })); return; }
-      holder.appendChild(leadTable(rows, refresh));
-    }
-    refresh();
-  };
-  function exportCsv() {
-    var rows = state.leads;
-    var head = ['id', 'name', 'business', 'phone', 'email', 'smsConsent', 'sourcePage', 'campaign', 'status', 'spam', 'createdAt'];
-    var csv = [head.join(',')].concat(rows.map(function (l) { return head.map(function (h) { return '"' + String(l[h] == null ? '' : l[h]).replace(/"/g, '""') + '"'; }).join(','); })).join('\n');
-    var blob = new Blob([csv], { type: 'text/csv' });
-    var a = el('a', { href: URL.createObjectURL(blob), download: 'quickscale-leads.csv' }); document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    toast('Exported ' + rows.length + ' leads.');
-  }
-  function leadTable(rows, onChange) {
-    var wrap = el('div', { class: 'tablewrap' });
-    var table = el('table', { class: 'table' });
-    table.appendChild(el('thead', {}, [el('tr', {}, [th('Lead'), th('Source / campaign'), th('SMS'), th('Status'), th('Age')])]));
-    var tb = el('tbody');
-    rows.forEach(function (l) {
-      tb.appendChild(el('tr', { onclick: function () { openLead(l, onChange); } }, [
-        el('td', {}, [el('div', { class: 'lead-name', text: l.name }), el('div', { class: 'lead-sub', text: l.business })]),
-        el('td', {}, [el('div', { text: l.campaign }), el('div', { class: 'lead-sub', text: l.sourcePage })]),
-        el('td', {}, [l.smsConsent ? el('span', { class: 'badge badge--consent', text: 'Yes' }) : el('span', { class: 'badge badge--noconsent', text: 'No' })]),
-        el('td', {}, [l.spam ? el('span', { class: 'badge badge--spam', text: 'spam' }) : badge(l.status)]),
-        el('td', { class: 'nowrap muted', text: ago(l.createdAt) })
-      ]));
-    });
-    table.appendChild(tb); wrap.appendChild(table); return wrap;
-  }
-
-  function openLead(l, onChange) {
-    DB.writeAudit('Viewed lead ' + (l.display || l.id));
-    var trigger = document.activeElement;
-    var scrim = el('div', { class: 'drawer-scrim', onclick: function () { close(); } });
-    var drawer = el('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Lead detail' });
-    function onKey(e) { if (e.key === 'Escape') close(); }
-    function close() { document.removeEventListener('keydown', onKey); if (scrim.parentNode) document.body.removeChild(scrim); if (drawer.parentNode) document.body.removeChild(drawer); if (trigger && trigger.focus) trigger.focus(); }
-    document.addEventListener('keydown', onKey);
-
-    drawer.appendChild(el('div', { class: 'drawer__head' }, [
-      el('div', {}, [el('div', { class: 'drawer__title', text: l.name }), el('div', { class: 'muted', text: l.business })]),
-      el('button', { class: 'drawer__x', type: 'button', 'aria-label': 'Close', text: '×', onclick: close })
+    c.appendChild(el('div', { class: 'callout mb-16', text: 'Leads, the sales pipeline, conversations, SMS, and bookings now live in GoHighLevel. This panel manages the website itself — media, copy, and team access.' }));
+    c.appendChild(el('div', { class: 'panel mb-16' }, [
+      el('div', { class: 'panel__head' }, [el('h2', { text: 'GoHighLevel' })]),
+      el('div', { class: 'panel__body' }, [
+        el('p', { class: 'muted mb-16', text: 'Contacts & opportunities, calendar / bookings, conversations, and automations all live in GHL.' }),
+        el('a', { class: 'abtn abtn--primary', href: GHL_URL, target: '_blank', rel: 'noopener', text: 'Open GoHighLevel ↗' })
+      ])
     ]));
-    var body = el('div', { class: 'drawer__body' });
-    body.appendChild(el('div', { class: 'row mb-16' }, [
-      el('a', { class: 'abtn abtn--primary abtn--sm', href: 'tel:' + String(l.phone).replace(/[^0-9+]/g, ''), html: ICONS.phone + '<span style="margin-left:6px">Call</span>' }),
-      el('a', { class: 'abtn abtn--ghost abtn--sm', href: 'mailto:' + l.email, html: ICONS.mail + '<span style="margin-left:6px">Email</span>' })
-    ]));
-    var kv = el('dl', { class: 'kv' });
-    [['Phone', l.phone], ['Email', l.email], ['Source', l.sourcePage], ['Campaign', l.campaign], ['SMS consent', l.smsConsent ? 'Yes — captured' : 'No'], ['Received', fmtDate(l.createdAt)], ['Lead ID', l.display || l.id]].forEach(function (p) { kv.appendChild(el('dt', { text: p[0] })); kv.appendChild(el('dd', { text: p[1] })); });
-    body.appendChild(kv);
-
-    body.appendChild(el('div', { class: 'field' }, [el('label', { text: 'Status' }), (function () {
-      var sel = el('select', { class: 'input' }, STATUSES.map(function (s) { return optEl(s, cap(s)); }));
-      sel.value = l.status;
-      sel.addEventListener('change', function () {
-        var prev = l.status, next = sel.value;
-        DB.updateLead(l.id, { status: next }).then(function () { l.status = next; DB.writeAudit('Changed ' + (l.display || l.id) + ' status → ' + next); toast('Status updated.'); if (onChange) onChange(); }).catch(function (e) { sel.value = prev; toast(errMsg(e)); });
-      });
-      return sel;
-    })()]));
-
-    body.appendChild(el('div', { class: 'row mb-16' }, [el('button', { class: 'abtn abtn--danger abtn--sm', type: 'button', text: l.spam ? 'Unmark spam' : 'Mark as spam', onclick: function () {
-      var next = !l.spam;
-      DB.updateLead(l.id, { spam: next }).then(function () { l.spam = next; DB.writeAudit((next ? 'Marked' : 'Unmarked') + ' ' + (l.display || l.id) + ' spam'); toast('Saved.'); if (onChange) onChange(); close(); }).catch(function (e) { toast(errMsg(e)); });
-    } })]));
-
-    body.appendChild(el('div', { class: 'section-title', text: 'Notes' }));
-    var notes = el('div', { class: 'notelist' }, [el('div', { class: 'muted', text: 'Loading…' })]);
-    body.appendChild(notes);
-    function paintNotes(list) { clear(notes); if (!list.length) { notes.appendChild(el('div', { class: 'muted', text: 'No notes yet.' })); return; } list.forEach(function (n) { notes.appendChild(el('div', { class: 'note' }, [el('div', { class: 'note__meta', text: n.by + ' · ' + fmtDate(n.at) }), el('div', { text: n.text })])); }); }
-    DB.notes(l.id).then(paintNotes).catch(function (e) { clear(notes); notes.appendChild(el('div', { class: 'error', text: errMsg(e) })); });
-    var ta = el('textarea', { class: 'input', placeholder: 'Add a note…' });
-    body.appendChild(el('div', { class: 'field' }, [ta]));
-    body.appendChild(el('button', { class: 'abtn abtn--ghost abtn--sm', type: 'button', text: 'Add note', onclick: function () {
-      if (!ta.value.trim()) return;
-      var text = ta.value.trim();
-      DB.addNote(l.id, text).then(function () { ta.value = ''; return DB.notes(l.id).then(paintNotes); toast('Note added.'); }).then(function () { toast('Note added.'); }).catch(function (e) { toast(errMsg(e)); });
-    } }));
-
-    drawer.appendChild(body);
-    document.body.appendChild(scrim); document.body.appendChild(drawer);
-    setTimeout(function () { (drawer.querySelector('select,textarea,button') || drawer).focus(); }, 0);
-  }
+    var grid = el('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(210px,1fr));' });
+    [['Media', 'Job-site photos & video', '#/media'], ['Content', 'Public site copy', '#/content'], ['Users', 'Team access', '#/users'], ['Settings', 'Integrations & security', '#/settings']].forEach(function (q) {
+      grid.appendChild(el('a', { class: 'panel', href: q[2], style: 'text-decoration:none;display:block' }, [el('div', { class: 'panel__body' }, [el('div', { class: 'lead-name', text: q[0] }), el('div', { class: 'muted', text: q[1] })])]));
+    });
+    c.appendChild(grid);
+  };
 
   /* ============================================================
      MEDIA
@@ -806,8 +629,8 @@
     Auth.isAuthed().then(function (ok) {
       var root = app();
       if (!ok) { return renderLogin().then(function (node) { clear(root); root.appendChild(node); }); }
-      return Promise.all([DB.me(), DB.leads()]).then(function (res) {
-        state.me = res[0]; state.leads = res[1];
+      return DB.me().then(function (me) {
+        state.me = me;
         clear(root);
         var r = route(); if (!VIEWS[r]) r = 'dashboard';
         root.appendChild(renderShell(r));

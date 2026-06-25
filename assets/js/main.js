@@ -144,21 +144,57 @@
     });
   }
 
-  /* ---- Smooth scroll to the embedded form (#book) with header offset ---- */
+  /* ---- Booking: GoHighLevel calendar modal when configured, else smooth-scroll to the form ---- */
+  var CAL_URL = CFG.ghlCalendarUrl || '';
   function scrollToBook() {
-    var el = $('#book');
-    if (!el) return false;
-    var y = el.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
+    var elx = $('#book');
+    if (!elx) return false;
+    var y = elx.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
     window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
     return true;
   }
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest('a[href$="#book"]');
-    if (a && $('#book')) {
-      e.preventDefault();
-      scrollToBook();
-      if (history.replaceState) history.replaceState(null, '', '#book');
+  var calModal = null, calLastFocus = null;
+  function calKey(e) { if (e.key === 'Escape') closeBooking(); }
+  function openBooking() {
+    try { if (window.fbq) window.fbq('track', 'Schedule'); } catch (e) {}
+    try { if (window.gtag) window.gtag('event', 'schedule', { method: 'calendar' }); } catch (e) {}
+    if (!calModal) {
+      calModal = document.createElement('div');
+      calModal.className = 'qs-cal';
+      calModal.setAttribute('role', 'dialog'); calModal.setAttribute('aria-modal', 'true'); calModal.setAttribute('aria-label', 'Book a call');
+      var panel = document.createElement('div'); panel.className = 'qs-cal__panel';
+      var bar = document.createElement('div'); bar.className = 'qs-cal__bar';
+      var title = document.createElement('span'); title.className = 'qs-cal__title'; title.textContent = 'Book your free strategy call';
+      var x = document.createElement('button'); x.type = 'button'; x.className = 'qs-cal__x'; x.setAttribute('aria-label', 'Close'); x.textContent = '×';
+      x.addEventListener('click', closeBooking);
+      bar.appendChild(title); bar.appendChild(x);
+      var frame = document.createElement('iframe'); frame.className = 'qs-cal__frame'; frame.title = 'Booking calendar'; frame.setAttribute('loading', 'lazy'); frame.src = CAL_URL;
+      var fb = document.createElement('div'); fb.className = 'qs-cal__fallback';
+      var fbLink = document.createElement('a'); fbLink.href = '#book'; fbLink.textContent = 'Prefer a callback? Use the form instead →';
+      fbLink.addEventListener('click', function (e) { e.preventDefault(); closeBooking(); if (!scrollToBook()) location.href = (location.pathname.replace(/[^/]*$/, '') ) + '#book'; });
+      fb.appendChild(fbLink);
+      panel.appendChild(bar); panel.appendChild(frame); panel.appendChild(fb);
+      calModal.appendChild(panel);
+      calModal.addEventListener('click', function (e) { if (e.target === calModal) closeBooking(); });
     }
+    calLastFocus = document.activeElement;
+    document.body.appendChild(calModal);
+    document.documentElement.style.overflow = 'hidden';
+    document.addEventListener('keydown', calKey);
+    setTimeout(function () { var c = calModal.querySelector('.qs-cal__x'); if (c) c.focus(); }, 0);
+  }
+  function closeBooking() {
+    if (calModal && calModal.parentNode) calModal.parentNode.removeChild(calModal);
+    document.documentElement.style.overflow = '';
+    document.removeEventListener('keydown', calKey);
+    if (calLastFocus && calLastFocus.focus) calLastFocus.focus();
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('a[href$="#book"]') : null;
+    if (!a) return;
+    if (CAL_URL) { e.preventDefault(); openBooking(); return; }        // calendar works on any page
+    if ($('#book')) { e.preventDefault(); scrollToBook(); if (history.replaceState) history.replaceState(null, '', '#book'); }
+    // else (no #book on this page, no calendar): let the link navigate to home #book
   });
   if (location.hash === '#book') {
     window.addEventListener('load', function () { setTimeout(scrollToBook, 60); });
