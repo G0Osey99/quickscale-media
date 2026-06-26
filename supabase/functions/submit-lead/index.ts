@@ -3,19 +3,21 @@
 //
 // The public lead form POSTs here. This is a thin, hardened RELAY that
 // forwards leads into GoHighLevel (the CRM / SMS / automation system) via a
-// GHL Inbound Webhook. It verifies anti-spam (Turnstile + honeypot), validates
-// and normalizes the fields, then forwards. It does NOT run a CRM of its own.
+// GHL Inbound Webhook. It verifies anti-spam (Turnstile + honeypot), rate-limits
+// per IP, validates/normalizes, then forwards. It does NOT run a CRM of its own.
 //
 // Deploy:  supabase functions deploy submit-lead --no-verify-jwt
 // Secrets (supabase secrets set ...):
 //   GHL_WEBHOOK_URL     GoHighLevel Inbound Webhook URL — the primary lead sink.
 //   ALLOWED_ORIGINS     comma-separated site origins (CORS).
-//   TURNSTILE_SECRET    Cloudflare Turnstile secret (optional; if set, token required).
+//   TURNSTILE_SECRET    Cloudflare Turnstile secret (STRONGLY recommended — the
+//                       primary bot defense; if set, a valid token is required).
 //   RESEND_API_KEY / NOTIFY_EMAIL / FROM_EMAIL   backup email notification (optional).
 //   META_PIXEL_ID / META_CAPI_TOKEN              Meta CAPI "Lead" (optional).
 // If GHL_WEBHOOK_URL is NOT set yet, the function falls back to storing the lead
 // in Supabase (`leads`) so nothing is lost while GHL is being wired up.
-// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected automatically.
+// Rate limiting uses `public.lead_throttle` (sink-independent), so it protects the
+// GHL path too. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -31,6 +33,7 @@ const META_PIXEL_ID = Deno.env.get("META_PIXEL_ID") ?? "";
 const META_CAPI_TOKEN = Deno.env.get("META_CAPI_TOKEN") ?? "";
 const META_TEST_EVENT_CODE = Deno.env.get("META_TEST_EVENT_CODE") ?? "";
 const META_API_VERSION = "v19.0";
+const RATE_MAX = 6;            // max accepted submissions per IP per 60s
 
 function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -95,7 +98,7 @@ Deno.serve(async (req) => {
   // Honeypot — pretend success.
   if (clean(body.company_website)) return json({ ok: true });
 
-  // Cloudflare Turnstile (enforced only if a secret is configured).
+  // Cloudflare Turnstile (enforced only if a secret is configured — the primary bot defense).
   if (TURNSTILE_SECRET) {
     const token = clean(body.turnstileToken, 4000);
     if (!token) return json({ error: "captcha_required" }, 400);
@@ -118,6 +121,7 @@ Deno.serve(async (req) => {
   }
 
   const rawIp = clientIp(req);
+  const ipHash = await sha256(rawIp);
   const userAgent = clean(req.headers.get("user-agent"), 400);
   const smsConsent = body.smsConsent === true;
   const consentText = smsConsent ? clean(body.consentText, 600) : "";
@@ -128,40 +132,61 @@ Deno.serve(async (req) => {
     ? body.attribution as Record<string, unknown> : {};
   const { first, last } = splitName(fullName);
 
-  // Backup notifications (best-effort) — run regardless of which sink is used.
-  const notify: Promise<unknown>[] = [];
-  if (RESEND_API_KEY && NOTIFY_EMAIL) {
-    notify.push((async () => {
-      const campaign = attribution.utm_campaign ? String(attribution.utm_campaign) : "-";
-      const lines = ["New strategy-call request", "", "Name: " + fullName, "Business: " + business,
-        "Phone: " + phoneRaw, "Email: " + email, "SMS consent: " + (smsConsent ? "yes" : "no"),
-        "Source: " + sourcePage, "Campaign: " + campaign];
-      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 5000);
-      try {
-        await fetch("https://api.resend.com/emails", {
-          method: "POST", signal: ctl.signal,
-          headers: { "Authorization": "Bearer " + RESEND_API_KEY, "content-type": "application/json" },
-          body: JSON.stringify({ from: FROM_EMAIL, to: NOTIFY_EMAIL, subject: "New lead: " + fullName + " - " + business, text: lines.join("\n") }),
-        });
-      } finally { clearTimeout(timer); }
-    })());
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+
+  // ---------- Per-IP rate limit (sink-independent; protects the GHL path too) ----------
+  // Best-effort: if the throttle table is unavailable, don't block legitimate submissions.
+  try {
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const { count } = await db.from("lead_throttle").select("id", { count: "exact", head: true }).eq("ip_hash", ipHash).gte("created_at", since);
+    if ((count ?? 0) >= RATE_MAX) return json({ error: "rate_limited" }, 429);
+    await db.from("lead_throttle").insert({ ip_hash: ipHash });
+    if (Math.random() < 0.05) {
+      const old = new Date(Date.now() - 3_600_000).toISOString();
+      db.from("lead_throttle").delete().lt("created_at", old).then(() => {}, () => {}); // fire-and-forget cleanup
+    }
+  } catch (e) { console.error("throttle_unavailable", e); }
+
+  // ---------- Backup notifications (built lazily; only dispatched once a sink accepts the lead) ----------
+  function sendEmail(): Promise<unknown> {
+    const campaign = attribution.utm_campaign ? String(attribution.utm_campaign) : "-";
+    const lines = ["New strategy-call request", "", "Name: " + fullName, "Business: " + business,
+      "Phone: " + phoneRaw, "Email: " + email, "SMS consent: " + (smsConsent ? "yes" : "no"),
+      "Source: " + sourcePage, "Campaign: " + campaign];
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 5000);
+    return fetch("https://api.resend.com/emails", {
+      method: "POST", signal: ctl.signal,
+      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ from: FROM_EMAIL, to: NOTIFY_EMAIL, subject: "New lead: " + fullName + " - " + business, text: lines.join("\n") }),
+    }).catch((e) => console.error("email_failed", e)).finally(() => clearTimeout(timer));
   }
-  if (META_PIXEL_ID && META_CAPI_TOKEN && eventId) {
-    notify.push((async () => {
-      const digits = phoneRaw.replace(/\D/g, "");
-      const phoneNorm = digits.length === 10 ? "1" + digits : digits;
-      const fbclid = typeof attribution.fbclid === "string" ? attribution.fbclid : "";
-      const landedMs = typeof attribution.landingAt === "string" ? Date.parse(attribution.landingAt) : NaN;
-      const fbcTime = Number.isFinite(landedMs) ? landedMs : Date.now();
-      const fbp = clean(body.fbp, 100);
-      const userData: Record<string, unknown> = { em: [await sha256(email)], ph: [await sha256(phoneNorm)], client_ip_address: rawIp, client_user_agent: userAgent };
-      if (fbclid) userData.fbc = "fb.1." + fbcTime + "." + fbclid;
-      if (fbp) userData.fbp = fbp;
-      const payload: Record<string, unknown> = { data: [{ event_name: "Lead", event_time: Math.floor(Date.now() / 1000), event_id: eventId, action_source: "website", event_source_url: pageUrl || undefined, user_data: userData }] };
-      if (META_TEST_EVENT_CODE) payload.test_event_code = META_TEST_EVENT_CODE;
-      await postJson("https://graph.facebook.com/" + META_API_VERSION + "/" + META_PIXEL_ID + "/events?access_token=" + encodeURIComponent(META_CAPI_TOKEN), payload, 5000);
-    })());
+  async function sendCapi(): Promise<void> {
+    const digits = phoneRaw.replace(/\D/g, "");
+    const phoneNorm = digits.length === 10 ? "1" + digits : digits;
+    const fbclid = typeof attribution.fbclid === "string" ? attribution.fbclid : "";
+    const landedMs = typeof attribution.landingAt === "string" ? Date.parse(attribution.landingAt) : NaN;
+    const fbcTime = Number.isFinite(landedMs) ? landedMs : Date.now();
+    const fbp = clean(body.fbp, 100);
+    const userData: Record<string, unknown> = { em: [await sha256(email)], ph: [await sha256(phoneNorm)], client_ip_address: rawIp, client_user_agent: userAgent };
+    if (fbclid) userData.fbc = "fb.1." + fbcTime + "." + fbclid;
+    if (fbp) userData.fbp = fbp;
+    const payload: Record<string, unknown> = { data: [{ event_name: "Lead", event_time: Math.floor(Date.now() / 1000), event_id: eventId, action_source: "website", event_source_url: pageUrl || undefined, user_data: userData }] };
+    if (META_TEST_EVENT_CODE) payload.test_event_code = META_TEST_EVENT_CODE;
+    await postJson("https://graph.facebook.com/" + META_API_VERSION + "/" + META_PIXEL_ID + "/events?access_token=" + encodeURIComponent(META_CAPI_TOKEN), payload, 5000);
   }
+  const emailConfigured = !!(RESEND_API_KEY && NOTIFY_EMAIL);
+  function runNotify(): Promise<unknown> {
+    const tasks: Promise<unknown>[] = [];
+    if (emailConfigured) tasks.push(sendEmail());
+    if (META_PIXEL_ID && META_CAPI_TOKEN && eventId) tasks.push(sendCapi());
+    return tasks.length ? Promise.allSettled(tasks) : Promise.resolve();
+  }
+
+  const leadRecord = {
+    full_name: fullName, business, phone: phoneRaw, email, sms_consent: smsConsent,
+    consent_text: consentText || null, consent_ip: smsConsent ? rawIp : null,
+    source_page: sourcePage, page_url: pageUrl, attribution, event_id: eventId, ip_hash: ipHash, user_agent: userAgent,
+  };
 
   // ---------- PRIMARY SINK: GoHighLevel inbound webhook ----------
   if (GHL_WEBHOOK_URL) {
@@ -177,31 +202,22 @@ Deno.serve(async (req) => {
       gclid: clean(attribution.gclid, 200), referrer: clean(attribution.referrer, 300),
       tags: ["website-lead"],
     };
-    const ok = await postJson(GHL_WEBHOOK_URL, ghlPayload);
-    if (!ok) {
-      // Dead-letter: never lose a lead. Store in Supabase if available (email is already queued).
-      try {
-        const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-        await db.from("leads").insert({ full_name: fullName, business, phone: phoneRaw, email, sms_consent: smsConsent, consent_text: consentText || null, consent_ip: smsConsent ? rawIp : null, source_page: sourcePage, page_url: pageUrl, attribution, event_id: eventId, ip_hash: await sha256(rawIp), user_agent: userAgent });
-      } catch (e) { console.error("ghl_failed_and_store_failed", e); }
+    const ghlOk = await postJson(GHL_WEBHOOK_URL, ghlPayload);
+    let stored = false;
+    if (!ghlOk) {
+      try { const { error } = await db.from("leads").insert(leadRecord); stored = !error; }
+      catch (e) { console.error("dead_letter_store_failed", e); }
     }
-    if (notify.length) { try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); } }
+    // Never tell the visitor "success" unless a durable sink (GHL, the dead-letter store,
+    // or an email notification we can send) accepted the lead.
+    if (!ghlOk && !stored && !emailConfigured) return json({ error: "server_error" }, 502);
+    try { await runNotify(); } catch (e) { console.error("notify_failed", e); }
     return json({ ok: true });
   }
 
   // ---------- FALLBACK (GHL not configured yet): store in Supabase ----------
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-  const ipHash = await sha256(rawIp);
-  const since = new Date(Date.now() - 60_000).toISOString();
-  const { count } = await db.from("leads").select("id", { count: "exact", head: true }).eq("ip_hash", ipHash).gte("created_at", since);
-  if ((count ?? 0) >= 5) return json({ error: "rate_limited" }, 429);
-
-  const { error } = await db.from("leads").insert({
-    full_name: fullName, business, phone: phoneRaw, email, sms_consent: smsConsent,
-    consent_text: consentText || null, consent_ip: smsConsent ? rawIp : null,
-    source_page: sourcePage, page_url: pageUrl, attribution, event_id: eventId, ip_hash: ipHash, user_agent: userAgent,
-  }).select("id").single();
+  const { error } = await db.from("leads").insert(leadRecord).select("id").single();
   if (error) { console.error("insert_failed", error); return json({ error: "server_error" }, 500); }
-  if (notify.length) { try { await Promise.allSettled(notify); } catch (e) { console.error("notify_failed", e); } }
+  try { await runNotify(); } catch (e) { console.error("notify_failed", e); }
   return json({ ok: true });
 });

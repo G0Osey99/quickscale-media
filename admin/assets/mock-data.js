@@ -101,10 +101,10 @@ window.QS_MOCK = {
   },
 
   auditLog: [
-    { at: "2026-06-20T13:45:00", actor: "Daniel", action: "Viewed lead L-1042", ip: "—" },
+    { at: "2026-06-20T13:45:00", actor: "Daniel", action: "Uploaded media for home-hero-reel", ip: "—" },
     { at: "2026-06-20T09:02:00", actor: "Daniel", action: "Signed in (2FA passed)", ip: "—" },
-    { at: "2026-06-19T17:02:00", actor: "Daniel", action: "Added note to L-1040", ip: "—" },
-    { at: "2026-06-19T10:40:00", actor: "Ty", action: "Changed L-1039 status → booked", ip: "—" },
-    { at: "2026-06-18T09:00:00", actor: "Daniel", action: "Changed L-1037 status → won", ip: "—" }
+    { at: "2026-06-19T17:02:00", actor: "Daniel", action: "Updated site content", ip: "—" },
+    { at: "2026-06-19T10:40:00", actor: "Ty", action: "Invited ty@quickscalem.com (Editor)", ip: "—" },
+    { at: "2026-06-18T09:00:00", actor: "Daniel", action: "Changed a teammate role → editor", ip: "—" }
   ]
 };

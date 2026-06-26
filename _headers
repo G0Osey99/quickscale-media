@@ -6,10 +6,11 @@
 # AT LAUNCH (attaching quickscalem.com): delete the "X-Robots-Tag: noindex" line in the
 # /* block below so the live site is indexable.
 #
-# The CSP already allows the live integrations: Supabase (form endpoint), Google Fonts,
-# Cloudflare Turnstile, Meta Pixel, and GA4. If you later add a calendar embed (Cal.com),
-# add its domains to frame-src / connect-src / script-src. Verify in the browser DevTools
-# console during the final audit — CSP is easy to loosen if anything legitimate is blocked.
+# The CSP already allows the live integrations: Supabase (form relay + admin), Google Fonts,
+# Cloudflare Turnstile, Meta Pixel, GA4, and the GoHighLevel calendar embed
+# (api.leadconnectorhq.com / link.msgsndr.com / widgets.leadconnectorhq.com in frame-src).
+# If your GHL calendar is on a custom domain, add it to frame-src. Verify in DevTools —
+# CSP is easy to loosen if anything legitimate is blocked.
 
 /*
   X-Content-Type-Options: nosniff

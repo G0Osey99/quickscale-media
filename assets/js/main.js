@@ -155,6 +155,11 @@
   }
   var calModal = null, calLastFocus = null;
   function calKey(e) { if (e.key === 'Escape') closeBooking(); }
+  function calTrap(e) {  // keep focus inside the dialog (the iframe handles its own internal tabbing)
+    if (calModal && calModal.parentNode && !calModal.contains(e.target)) {
+      var c = calModal.querySelector('.qs-cal__x'); if (c) c.focus();
+    }
+  }
   function openBooking() {
     try { if (window.fbq) window.fbq('track', 'Schedule'); } catch (e) {}
     try { if (window.gtag) window.gtag('event', 'schedule', { method: 'calendar' }); } catch (e) {}
@@ -171,7 +176,12 @@
       var frame = document.createElement('iframe'); frame.className = 'qs-cal__frame'; frame.title = 'Booking calendar'; frame.setAttribute('loading', 'lazy'); frame.src = CAL_URL;
       var fb = document.createElement('div'); fb.className = 'qs-cal__fallback';
       var fbLink = document.createElement('a'); fbLink.href = '#book'; fbLink.textContent = 'Prefer a callback? Use the form instead →';
-      fbLink.addEventListener('click', function (e) { e.preventDefault(); closeBooking(); if (!scrollToBook()) location.href = (location.pathname.replace(/[^/]*$/, '') ) + '#book'; });
+      fbLink.addEventListener('click', function (e) {
+        e.preventDefault(); closeBooking();
+        if (scrollToBook()) return;                          // home/contact have the #book form
+        var cl = document.querySelector('a[href$="contact/"]'); // else go to the contact page form (relative)
+        location.href = (cl ? cl.getAttribute('href') : 'contact/') + '#book';
+      });
       fb.appendChild(fbLink);
       panel.appendChild(bar); panel.appendChild(frame); panel.appendChild(fb);
       calModal.appendChild(panel);
@@ -181,15 +191,18 @@
     document.body.appendChild(calModal);
     document.documentElement.style.overflow = 'hidden';
     document.addEventListener('keydown', calKey);
+    document.addEventListener('focusin', calTrap);
     setTimeout(function () { var c = calModal.querySelector('.qs-cal__x'); if (c) c.focus(); }, 0);
   }
   function closeBooking() {
     if (calModal && calModal.parentNode) calModal.parentNode.removeChild(calModal);
     document.documentElement.style.overflow = '';
     document.removeEventListener('keydown', calKey);
+    document.removeEventListener('focusin', calTrap);
     if (calLastFocus && calLastFocus.focus) calLastFocus.focus();
   }
   document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.qs-cal')) return;   // clicks inside the modal (e.g. the fallback link) don't re-trigger
     var a = e.target.closest ? e.target.closest('a[href$="#book"]') : null;
     if (!a) return;
     if (CAL_URL) { e.preventDefault(); openBooking(); return; }        // calendar works on any page

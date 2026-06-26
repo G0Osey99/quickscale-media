@@ -506,12 +506,12 @@ a.nap__value:hover{color:var(--gold);}
 
 /* ---------- GoHighLevel booking modal ---------- */
 .qs-cal{position:fixed;inset:0;z-index:120;background:rgba(13,23,48,.62);display:flex;align-items:center;justify-content:center;padding:16px;}
-.qs-cal__panel{background:#fff;border-radius:var(--radius-lg);width:min(760px,100%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-media);}
+.qs-cal__panel{background:#fff;border-radius:var(--radius-lg);width:min(760px,100%);max-height:92vh;display:flex;flex-direction:column;overflow-y:auto;box-shadow:var(--shadow-media);}
 .qs-cal__bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);}
 .qs-cal__title{font-family:var(--ff-display);font-weight:800;font-size:16px;color:var(--ink);}
 .qs-cal__x{width:34px;height:34px;border:none;background:var(--cream);border-radius:9px;font-size:20px;line-height:1;color:var(--ink);cursor:pointer;}
 .qs-cal__x:hover{background:var(--cream-2);}
-.qs-cal__frame{width:100%;height:70vh;min-height:520px;border:0;display:block;}
+.qs-cal__frame{width:100%;height:70vh;min-height:min(520px,60vh);border:0;display:block;flex:1 1 auto;}
 .qs-cal__fallback{padding:10px 16px;border-top:1px solid var(--border);text-align:center;}
 .qs-cal__fallback a{color:var(--navy-line);font-size:14px;font-weight:600;text-decoration:underline;}
 

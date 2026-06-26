@@ -145,6 +145,17 @@ create policy "audit: owner reads" on public.audit_log
 create policy "audit: staff append" on public.audit_log
   for insert to authenticated with check (public.is_staff() and actor = auth.uid());
 
+-- ---------- lead_throttle (per-IP rate-limit log for the submit-lead relay) ----------
+-- Sink-independent so it protects the GoHighLevel path too (which doesn't write `leads`).
+create table if not exists public.lead_throttle (
+  id bigserial primary key,
+  ip_hash text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists lead_throttle_idx on public.lead_throttle (ip_hash, created_at desc);
+alter table public.lead_throttle enable row level security;
+-- No policies on purpose: only the Edge Function's service_role touches it.
+
 -- ---------- storage bucket for uploads ----------
 insert into storage.buckets (id, name, public) values ('media','media', true)
   on conflict (id) do nothing;
